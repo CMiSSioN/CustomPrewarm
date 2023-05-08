@@ -1,6 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using BattleTech.Data;
-using Harmony;
+using HarmonyLib;
 using MessagePack;
 
 namespace CustomPrewarm.Serialize {
@@ -20,9 +21,14 @@ namespace CustomPrewarm.Serialize {
     public HardpointDataDef(){}
     public HardpointDataDef(BattleTech.HardpointDataDef src) {
       this.ID = src.ID;
-      this.HardpointData = new List<_WeaponHardpointData>();
-      if(src.HardpointData != null) {
-        foreach(var el in src.HardpointData) { this.HardpointData.Add(new _WeaponHardpointData(el)); }
+      try {
+        this.HardpointData = new List<_WeaponHardpointData>();
+        if (src.HardpointData != null) {
+          foreach (var el in src.HardpointData) { this.HardpointData.Add(new _WeaponHardpointData(el)); }
+        }
+      } catch (Exception e) {
+        Log.M_Err?.TWL(0,"HardpointDataDef id "+this.ID,true);
+        Log.M_Err?.WL(e.ToString());
       }
     }
     public object toBT(DataManager dataManager) {

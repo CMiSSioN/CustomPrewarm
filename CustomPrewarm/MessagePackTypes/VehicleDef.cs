@@ -1,4 +1,4 @@
-﻿using Harmony;
+﻿using HarmonyLib;
 using MessagePack;
 using System.Collections.Generic;
 
@@ -41,7 +41,7 @@ namespace CustomPrewarm.Serialize {
   }
   [MessagePackObject]
   public class VehicleComponentRef : BaseComponentRef {
-    [Key(8)]
+    [Key(10)]
     public BattleTech.VehicleChassisLocations MountedLocation { get; set; } = BattleTech.VehicleChassisLocations.None;
     public VehicleComponentRef() { }
     public VehicleComponentRef(BattleTech.VehicleComponentRef src) : base((BattleTech.BaseComponentRef)src) {

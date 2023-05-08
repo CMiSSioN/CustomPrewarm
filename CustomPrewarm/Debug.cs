@@ -4,7 +4,7 @@ using BattleTech.Save;
 using BattleTech.Save.SaveGameStructure;
 using BattleTech.Save.Test;
 using BattleTech.UI;
-using Harmony;
+using HarmonyLib;
 using HBS;
 using System;
 using System.Collections;
@@ -54,6 +54,19 @@ namespace CustomPrewarm {
       return false;
     }
   }
+  //[HarmonyPatch(typeof(SimGameState), "GenerateSimGameUID")]
+  //public static class SimGameState_GenerateSimGameUID {
+  //  public static void Prefix(SimGameState __instance) {
+  //    try {
+  //      if (__instance.HasInitStateBits(SimGameState.InitStates.FROM_SAVE) && !__instance.HasInitStateBits(SimGameState.InitStates.HEADLESS_STATE)) {
+  //        Log.M?.TWL(0,"Generating SIM GAME UID while still loading!");
+  //        Log.M?.WL(0,Env);
+  //      }
+  //    } catch (Exception e) {
+  //      Log.M_Err?.TWL(0, e.ToString(), true);
+  //    }
+  //  }
+  //}
   [HarmonyPatch(typeof(SimGameUXCreator), "OnSimGameInitializeComplete")]
   public static class SimGameUXCreator_OnSimGameInitializeComplete {
     public static IEnumerator InitializeUXRoutineLoc(this SimGameUXCreator __instance) {

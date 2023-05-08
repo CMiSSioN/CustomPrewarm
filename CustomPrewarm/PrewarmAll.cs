@@ -6,7 +6,7 @@ using BattleTech.UI;
 using BattleTech.UI.TMProWrapper;
 using CustomComponents;
 using CustomTranslation;
-using Harmony;
+using HarmonyLib;
 using HBS;
 using HBS.Data;
 using HBS.Util;
@@ -177,11 +177,16 @@ namespace CustomPrewarm {
     }
     public delegate void d_Registry_ProcessCustomFactories(object target, Dictionary<string, object> values, bool replace);
     public static d_Registry_ProcessCustomFactories i_Registry_ProcessCustomFactories = null;
+    public delegate void d_Registry_ProcessCustomFactoriesNoReplace(object target, Dictionary<string, object> values);
+    public static d_Registry_ProcessCustomFactoriesNoReplace i_Registry_ProcessCustomFactoriesNoReplace = null;
     public static void Registry_ProcessCustomFactories(object target, Dictionary<string, object> values, bool replace = true) {
-      if (i_Registry_ProcessCustomFactories == null) {
+      if (i_Registry_ProcessCustomFactories != null) { i_Registry_ProcessCustomFactories(target, values, replace); return; }
+      if (i_Registry_ProcessCustomFactoriesNoReplace != null) { i_Registry_ProcessCustomFactoriesNoReplace(target, values); return; }
+      {
         {
-          {
-            MethodInfo method = typeof(CustomComponents.Registry).GetMethod("ProcessCustomFactories", BindingFlags.NonPublic | BindingFlags.Static);
+          MethodInfo method = typeof(CustomComponents.Registry).GetMethod("ProcessCustomFactories", BindingFlags.NonPublic | BindingFlags.Static);
+          var parameters = method.GetParameters();
+          if (parameters.Length == 3) {
             var dm = new DynamicMethod("CPProcessCustomFactories", null, new Type[] { typeof(object), typeof(Dictionary<string, object>), typeof(bool) });
             var gen = dm.GetILGenerator();
             gen.Emit(OpCodes.Ldarg_0);
@@ -190,10 +195,20 @@ namespace CustomPrewarm {
             gen.Emit(OpCodes.Call, method);
             gen.Emit(OpCodes.Ret);
             i_Registry_ProcessCustomFactories = (d_Registry_ProcessCustomFactories)dm.CreateDelegate(typeof(d_Registry_ProcessCustomFactories));
+          }else if (parameters.Length == 2) {
+            var dm = new DynamicMethod("CPProcessCustomFactories", null, new Type[] { typeof(object), typeof(Dictionary<string, object>) });
+            var gen = dm.GetILGenerator();
+            gen.Emit(OpCodes.Ldarg_0);
+            gen.Emit(OpCodes.Ldarg_1);
+            gen.Emit(OpCodes.Call, method);
+            gen.Emit(OpCodes.Ret);
+            i_Registry_ProcessCustomFactoriesNoReplace = (d_Registry_ProcessCustomFactoriesNoReplace)dm.CreateDelegate(typeof(d_Registry_ProcessCustomFactoriesNoReplace));
           }
         }
       }
-      i_Registry_ProcessCustomFactories?.Invoke(target, values, replace);
+      if (i_Registry_ProcessCustomFactories != null) { i_Registry_ProcessCustomFactories(target, values, replace); return; }
+      if (i_Registry_ProcessCustomFactoriesNoReplace != null) { i_Registry_ProcessCustomFactoriesNoReplace(target, values); return; }
+      throw new Exception("can't find CustomComponents.Registry.ProcessCustomFactories");
     }
     public static void BuildCacheFile(d_MainManuEnableButtons p, DataManager dataManager, string cachepath) {
       Stopwatch stopwatch = new Stopwatch();
@@ -221,6 +236,7 @@ namespace CustomPrewarm {
           if (entry.IsAssetBundled) { continue; }
           if (entry.IsFileAsset == false) { continue; }
           if (entry.IsTemplate) { continue; }
+          if (entry.Id.StartsWith("Gear_EngineCore_")) { continue; }
           if (File.Exists(entry.FilePath) == false) {
             Log.M?.TWL(0, "File does not exists:" + entry.FileName + ":" + entry.FilePath);
             continue;
@@ -251,7 +267,9 @@ namespace CustomPrewarm {
           if (entry.IsAssetBundled) { continue; }
           if (entry.IsFileAsset == false) { continue; }
           if (entry.IsTemplate) { continue; }
+          if (entry.id.StartsWith("Gear_EngineCore")) { continue; }
           if (File.Exists(entry.FilePath) == false) { continue; }
+          Log.M?.WL(2, entry.id);
           p.curDataCount += 1;
           try {
             //string content = string.Empty;
@@ -342,7 +360,7 @@ namespace CustomPrewarm {
           mechDefs.Add(mechDefBT);
         }
         p.allDataCount = mechDefs.Count;
-        CustomComponents.AutoFixer.Shared.FixMechDef(mechDefs);
+        CustomComponents.AutoFixer.Shared.ProcessMechDefs(mechDefs);
         foreach (var mechDef in mechDefs) {
           if (mechDef.MechTags.Contains(FastDataLoadHelper.NOAUTOFIX_TAG) == false) {
             mechDef.MechTags.Add(FastDataLoadHelper.NOAUTOFIX_TAG);
@@ -424,25 +442,29 @@ namespace CustomPrewarm {
       p.messageText = "BUILDING CACHE";
       Log.M?.TWL(0,"Building new cache started");
       Core.disableFromJSON = false;
-      Dictionary<BattleTechResourceType, int> dictionary1 = new Dictionary<BattleTechResourceType, int>();
+      Dictionary<BattleTechResourceType, int> statDict = new Dictionary<BattleTechResourceType, int>();
+      foreach (BattleTechResourceType techResourceType in FastDataLoadHelper.prewarmTypesOrder) {
+        statDict.Add(techResourceType, 0);
+      }
       foreach (BattleTechResourceType techResourceType in FastDataLoadHelper.prewarmTypesOrder) {
         foreach (VersionManifestEntry versionManifestEntry in dataManager.ResourceLocator.AllEntriesOfResource(techResourceType)) {
           if (!versionManifestEntry.IsAssetBundled && versionManifestEntry.IsFileAsset && !versionManifestEntry.IsTemplate) {
+            if (versionManifestEntry.id.StartsWith("Gear_EngineCore_")) { continue; }
             if (!File.Exists(versionManifestEntry.FilePath)) {
               Log.M?.TWL(0, "File does not exists:" + versionManifestEntry.FileName + ":" + versionManifestEntry.FilePath);
             } else {
               ++p.allDataCount;
-              if (!dictionary1.ContainsKey(techResourceType))
-                dictionary1.Add(techResourceType, 1);
-              else
-                ++dictionary1[techResourceType];
+              //if (!statDict.ContainsKey(techResourceType))
+                //statDict.Add(techResourceType, 1);
+              //else
+              statDict[techResourceType] += 1;
             }
           }
         }
       }
       Log.M?.TWL(0, "Statistics:");
       List<KeyValuePair<BattleTechResourceType, int>> keyValuePairList = new List<KeyValuePair<BattleTechResourceType, int>>();
-      foreach (KeyValuePair<BattleTechResourceType, int> keyValuePair in dictionary1)
+      foreach (KeyValuePair<BattleTechResourceType, int> keyValuePair in statDict)
         keyValuePairList.Add(keyValuePair);
       keyValuePairList.Sort((Comparison<KeyValuePair<BattleTechResourceType, int>>)((a, b) => a.Value.CompareTo(b.Value)));
       foreach (KeyValuePair<BattleTechResourceType, int> keyValuePair in keyValuePairList)
@@ -464,6 +486,7 @@ namespace CustomPrewarm {
           if (entry.IsAssetBundled) { continue; }
           if (entry.IsFileAsset == false) { continue; }
           if (entry.IsTemplate) { continue; }
+          if (entry.id.StartsWith("Gear_EngineCore_")) { continue; }
           if (File.Exists(entry.FilePath) == false) { continue; }
           ++p.curDataCount;
           if (cacheItems.TryGetValue(entry.Id, out var cacheItem) == false) {
@@ -540,6 +563,7 @@ namespace CustomPrewarm {
       p.messageText = "AUTOFIXING";
       p.allDataCount = 0;
       p.curDataCount = 0;
+      Log.M?.WL(0, "before");
       if (cacheData.payload.TryGetValue(BattleTechResourceType.MechDef, out var mechDefinitions)) {
         List<BattleTech.MechDef> mechDefs = new List<BattleTech.MechDef>();
         foreach (var mechDefinition in mechDefinitions) {
@@ -551,10 +575,23 @@ namespace CustomPrewarm {
           if (definition.MechTags.Contains(FastDataLoadHelper.NOAUTOFIX_TAG)) { continue; }
           if (definition.MechTags.Contains(FastDataLoadHelper.FAKE_VEHICLE_TAG)) { continue; }
           mechDefs.Add(definition);
+          if(definition.Description.Id == "mechdef_apollo_APL-1M") {
+            Log.M?.WL(1,$"{definition.Description.Id}");
+            foreach(var cmp in definition.Inventory) {
+              Log.M?.WL(2, $"{cmp.ComponentDefID}:{cmp.LocalGUID}");
+            }
+          }
         }
         p.allDataCount = mechDefs.Count;
-        AutoFixer.Shared.FixMechDef(mechDefs);
+        AutoFixer.Shared.ProcessMechDefs(mechDefs);
+        Log.M?.WL(0, "after");
         foreach (BattleTech.MechDef mechDef in mechDefs) {
+          if (mechDef.Description.Id == "mechdef_apollo_APL-1M") {
+            Log.M?.WL(1, $"{mechDef.Description.Id}");
+            foreach (var cmp in mechDef.Inventory) {
+              Log.M?.WL(2, $"{cmp.ComponentDefID}:{cmp.LocalGUID}");
+            }
+          }
           if (!mechDef.MechTags.Contains(FastDataLoadHelper.NOAUTOFIX_TAG))
             mechDef.MechTags.Add(FastDataLoadHelper.NOAUTOFIX_TAG);
         }
@@ -583,6 +620,7 @@ namespace CustomPrewarm {
       return cacheData;
     }
     public static bool PLEASE_RESTART = false;
+    public static bool PLEASE_DISABLE = false;
     public static void ReadCacheFile(MainMenu_ShowRefreshingSaves.d_MainManuEnableButtons p, DataManager dataManager, string cachepath) {
       Core.CacheLoadingInited = true;
       p.allDataCount = 0;
@@ -592,6 +630,7 @@ namespace CustomPrewarm {
       stopwatch1.Start();
       CacheData cacheData = null;
       PLEASE_RESTART = false;
+      PLEASE_DISABLE = false;
       if (!File.Exists(cachepath)) {
         cacheData = MainMenu_ShowRefreshingSaves.CreateCacheFile(p, dataManager);
         PLEASE_RESTART = true;
@@ -731,15 +770,31 @@ namespace CustomPrewarm {
       Log.M?.TWL(0, "invoking FromJSON ended:" + (object)stopwatch1.Elapsed.TotalSeconds, true);
       if (cacheData.payload.TryGetValue(BattleTechResourceType.MechDef, out var mechDefinitions)) {
         List<BattleTech.MechDef> mechDefs = new List<BattleTech.MechDef>();
+        Log.M?.WL(0, "before autofixing");
         foreach (var mechDefinition in mechDefinitions) {
           BattleTech.MechDef definition = mechDefinition.Value.btDefinition as BattleTech.MechDef;
           if (definition == null) { continue; }
+          if (definition.Description.Id == "mechdef_apollo_APL-1M") {
+            Log.M?.WL(1, $"{definition.Description.Id}");
+            foreach (var cmp in definition.Inventory) {
+              Log.M?.WL(2, $"{cmp.ComponentDefID}:{cmp.LocalGUID}");
+            }
+          }
           if (definition.MechTags.Contains(FastDataLoadHelper.NOAUTOFIX_TAG)) { continue; }
           if (definition.MechTags.Contains(FastDataLoadHelper.FAKE_VEHICLE_TAG)) { continue; }
           mechDefs.Add(definition);
         }
         p.allDataCount = mechDefs.Count;
-        AutoFixer.Shared.FixMechDef(mechDefs);
+        AutoFixer.Shared.ProcessMechDefs(mechDefs);
+        Log.M?.WL(0,"after autofixing");
+        foreach(var definition in mechDefs) {
+          if (definition.Description.Id == "mechdef_apollo_APL-1M") {
+            Log.M?.WL(1, $"{definition.Description.Id}");
+            foreach (var cmp in definition.Inventory) {
+              Log.M?.WL(2, $"{cmp.ComponentDefID}:{cmp.LocalGUID}");
+            }
+          }
+        }
       }
       Log.M?.TWL(0, "autofixing ended:" + (object)stopwatch1.Elapsed.TotalSeconds, true);
       p.messageText = "Gather Dependencies";
@@ -781,6 +836,7 @@ namespace CustomPrewarm {
         if (curCount > p.curDataCount) { watchdog = 0; p.curDataCount = curCount; } else { ++watchdog; }
         if (watchdog > 100) { break; }
       }
+      //throw new Exception("test exception");
       if (cacheData.update) {
         Log.M?.TWL(0, "serializing:" + stopwatch1.Elapsed.TotalSeconds);
         p.messageText = "SERIALIZING";
@@ -967,11 +1023,35 @@ namespace CustomPrewarm {
     //  stopwatch.Stop();
     //  Log.M?.TWL(0, "dependencies: " + cachepath + " " + stopwatch.Elapsed.TotalSeconds, true);
     //}
+    private static string f_CachePath = string.Empty;
+    public static string CachePath {
+      get {
+        if (string.IsNullOrEmpty(f_CachePath) == false) { return f_CachePath; }
+        f_CachePath = SearchCacheFolder();
+        return f_CachePath;
+      }
+    }
+    public static string SearchCacheFolder() {
+      string cur_dir = Core.Settings.directory;
+      while(string.IsNullOrEmpty(cur_dir) == false) {
+        string cache_dir = Path.Combine(cur_dir, ".modtek");
+        if (Directory.Exists(cache_dir)) { return Path.Combine(cache_dir, "msgpackcache.bin"); }
+        cur_dir = Path.GetDirectoryName(cur_dir);
+      }
+      return string.Empty;
+    }
     public static void ResetCache() {
-      string cachepath = Path.Combine(Core.Settings.directory, "..", ".modtek", "msgpackcache.bin");
-      if (File.Exists(cachepath)) { File.Delete(cachepath); }
+      string cachepath = CachePath;
+      Log.M?.TWL(0, "Reset cache "+ cachepath, true);
+      if (File.Exists(cachepath)) {
+        Log.M?.WL(0, cachepath + " deleting", true);
+        File.Delete(cachepath);
+      }
       cachepath = Path.Combine(Core.Settings.savesdirectory, "msgpackcache.bin");
-      if (File.Exists(cachepath)) { File.Delete(cachepath); }
+      if (File.Exists(cachepath)) {
+        Log.M?.WL(0, cachepath + " deleting", true);
+        File.Delete(cachepath);
+      }
     }
     public static void DoPrewarm(object param) {
       d_MainManuEnableButtons p = param as d_MainManuEnableButtons;
@@ -979,12 +1059,9 @@ namespace CustomPrewarm {
       Log.M?.TWL(0, "PrewarmTest started " + (p == null ? "null" : "not null"), true);
       Stopwatch stopwatch = new Stopwatch();
       
-      //p.PrewarmEnded = true;
-      //return;
       try {
         if (p == null) { return; }
-        //CustomComponents.JSONSerializationUtility_RehydrateObjectFromDictionary_Patch.switchoff = false;
-        string cachepath = Path.Combine(Core.Settings.directory, "..", ".modtek", "msgpackcache.bin");
+        string cachepath = CachePath;
         if (Core.Settings.UseHashedPreloading) {
           cachepath = Path.Combine(Core.Settings.savesdirectory, "msgpackcache.bin");
         }
@@ -992,20 +1069,12 @@ namespace CustomPrewarm {
           dataManager = SceneSingletonBehavior<DataManagerUnityInstance>.Instance.DataManager;
           ReadCacheFile(p, dataManager, cachepath);
         } catch (Exception e) {
+          PLEASE_DISABLE = true;
           Log.M?.TWL(0, "Prewarm ended warning", true);
           Log.M?.TWL(0, e.ToString(), true);
         }
-        //string dllpath = Path.Combine(CustomAmmoCategories.Settings.directory, "System.Runtime.dll");
-        //Assembly dll = Assembly.LoadFile(dllpath);
-        //Log.M?.TWL(0,dll.FullName);
-        //dllpath = Path.Combine(CustomAmmoCategories.Settings.directory, "System.Runtime.InteropServices.dll");
-        //dll = Assembly.LoadFile(dllpath);
-        //Log.M?.TWL(0, dll.FullName);
-        //dllpath = Path.Combine(CustomAmmoCategories.Settings.directory, "System.Runtime.Extensions.dll");
-        //dll = Assembly.LoadFile(dllpath);
-        //Log.M?.TWL(0, dll.FullName);
-        //File.WriteAllBytes(cachepath, MessagePackSerializer.FromJson(JsonConvert.SerializeObject(definitionsCache)));
       } catch (Exception e) {
+        PLEASE_DISABLE = true;
         Log.M?.TWL(0, "Prewarm ended crit", true);
         Log.M?.TWL(0, e.ToString(), true);
       }
@@ -1015,42 +1084,77 @@ namespace CustomPrewarm {
     public class PrewarmEndMessager : MonoBehaviour {
       public d_MainManuEnableButtons EnableButtonsDelegate { get; set; }
       public string text { get; set; } = string.Empty;
-      public bool WaitingForStart { get; set; } = false;
+      public int WaitingForStart { get; set; } = 0;
+      public int WaitingForSaves { get; set; } = 0;
+      public GameObject refreshingSavesSpinner { get; set; } = null;
       public bool StartPrewarm(MessageCenterMessage message) {
+        Log.M?.TWL(0, "StartPrewarm");
         EnableButtonsDelegate.message = message;
-        WaitingForStart = true;
-        GameObject refreshingSavesSpinner = Traverse.Create(EnableButtonsDelegate.__instance).Field<GameObject>("refreshingSavesSpinner").Value;
+        WaitingForStart = 10;
+        WaitingForSaves = 10;
+        PreloaderAPI = typeof(ModTek.ModTek).Assembly.GetType("ModTek.PreloaderAPI");
+        if (PreloaderAPI == null) {
+          Log.M?.TWL(0, "Can't find ModTek.PreloaderAPI");
+        } else {
+          if (IsPreloading == null) {
+            IsPreloading = PreloaderAPI.GetProperty("IsPreloading", BindingFlags.Static | BindingFlags.Public);
+            if (IsPreloading == null) { Log.M?.TWL(0, "Can't find ModTek.PreloaderAPI.IsPreloading"); }
+          }
+        }
+        this.refreshingSavesSpinner = EnableButtonsDelegate.__instance.refreshingSavesSpinner;
         EnableButtonsDelegate.refreshingSavesPercentageMessage = refreshingSavesSpinner.FindObject<LocalizableText>("message_text");
-        EnableButtonsDelegate.refreshingSavesPercentageText = Traverse.Create(EnableButtonsDelegate.__instance).Field<LocalizableText>("refreshingSavesPercentageText").Value;
-        Traverse.Create(EnableButtonsDelegate.__instance).Field<LocalizableText>("refreshingSavesPercentageText").Value = null;
+        EnableButtonsDelegate.refreshingSavesPercentageText = EnableButtonsDelegate.__instance.refreshingSavesPercentageText;
+        return true;
+      }
+      public void SetWaitingForModTek() {
+        EnableButtonsDelegate.__instance.refreshingSavesPercentageText = null;
+        if (EnableButtonsDelegate.__instance._continueButton != null)
+          EnableButtonsDelegate.__instance._continueButton.SetState(ButtonState.Disabled);
+        if (EnableButtonsDelegate.__instance.campaignLoadButton != null)
+          EnableButtonsDelegate.__instance.campaignLoadButton.SetState(ButtonState.Disabled);
+        if (EnableButtonsDelegate.__instance.skirmishLoadButton != null)
+          EnableButtonsDelegate.__instance.skirmishLoadButton.SetState(ButtonState.Disabled);
+        if (EnableButtonsDelegate.__instance._careerContinueButton != null)
+          EnableButtonsDelegate.__instance._careerContinueButton.SetState(ButtonState.Disabled);
+        if (EnableButtonsDelegate.__instance.careerLoadButton != null)
+          EnableButtonsDelegate.__instance.careerLoadButton.SetState(ButtonState.Disabled);
+        if (EnableButtonsDelegate.__instance.mainNavPanel != null && EnableButtonsDelegate.__instance.mainNavPanel.activeSelf)
+          EnableButtonsDelegate.__instance.mainNavPanel.SetActive(false);
+        if (EnableButtonsDelegate.__instance.refreshingSavesSpinner != null)
+          EnableButtonsDelegate.__instance.refreshingSavesSpinner.SetActive(true);
         EnableButtonsDelegate.messageText = "WAITING FOR MODTEK";
         EnableButtonsDelegate.refreshingSavesPercentageMessage.SetText("WAITING FOR MODTEK");
-        EnableButtonsDelegate.message = message;
-        return true;
       }
       private static Type PreloaderAPI = null;
       private static PropertyInfo IsPreloading = null;
       public void Update() {
         if (EnableButtonsDelegate == null) { return; }
-        if (WaitingForStart) {
-          if (PreloaderAPI == null) {
-            PreloaderAPI = typeof(ModTek.ModTek).Assembly.GetType("ModTek.PreloaderAPI");
+        //Log.M?.WL(0, $"Update WaitingForStart:{WaitingForStart} WaitingForSaves:{WaitingForSaves}");
+        if(WaitingForSaves > 0) {
+          if (this.refreshingSavesSpinner == null) { WaitingForSaves = 0; } else {
+            if (this.refreshingSavesSpinner.activeSelf == false) {
+              --WaitingForSaves;
+              if (WaitingForSaves <= 0) { SetWaitingForModTek(); }
+            } else {
+              WaitingForSaves = 10;
+            }
           }
-          if(PreloaderAPI == null) {
-            WaitingForStart = false;
-            EnableButtonsDelegate.StartPrewarm();
+          return;
+        }
+        if (WaitingForStart > 0) {
+          bool is_preloading = false;
+          if (IsPreloading != null) {
+            is_preloading = (bool)IsPreloading.GetValue(null);
+          }
+          if (LoadingCurtain.activeInstance.Visible) { is_preloading = true; }
+          Log.M?.TWL(0, $"is in waiting for ModTek:{is_preloading}");
+          if (is_preloading == false) {
+            --WaitingForStart;
+            if (WaitingForStart <= 0) { EnableButtonsDelegate.StartPrewarm(); }
           } else {
-            if(IsPreloading == null) {
-              IsPreloading = PreloaderAPI.GetProperty("IsPreloading", BindingFlags.Static | BindingFlags.Public);
-            }
-            if (IsPreloading == null) {
-              WaitingForStart = false;
-              EnableButtonsDelegate.StartPrewarm();
-            } else if((bool)IsPreloading.GetValue(null) == false) {
-              WaitingForStart = false;
-              EnableButtonsDelegate.StartPrewarm();
-            }
+            WaitingForStart = 10;
           }
+          return;
         }
         if (EnableButtonsDelegate.PrewarmEnded == false) {
           try {
@@ -1078,15 +1182,36 @@ namespace CustomPrewarm {
                 EnableButtonsDelegate.refreshingSavesPercentageMessage.SetText(EnableButtonsDelegate.messageText);
                 this.text = EnableButtonsDelegate.messageText;
               }
-              EnableButtonsDelegate.refreshingSavesPercentageText.SetText(string.Format("{0}/{1}", EnableButtonsDelegate.curDataCount, EnableButtonsDelegate.allDataCount));
+              EnableButtonsDelegate.refreshingSavesPercentageText.SetText(string.Format("{0}", EnableButtonsDelegate.curDataCount));
             }
           }
           return;
         }
         EnableButtonsDelegate.EnableButtons(EnableButtonsDelegate.message);
         EnableButtonsDelegate = null;
+        if (PLEASE_DISABLE) {
+          Core.Settings.UseFastPreloading = false;
+          CustomSettings.ModsLocalSettingsHelper.SaveSettings("CustomPrewarm");
+          if (Localize.Strings.CurrentCulture != Localize.Strings.Culture.CULTURE_RU_RU) {
+            GenericPopup popup = GenericPopupBuilder.Create("SOMETHING IS WRONG", "CACHING IS DISABLED. RESTART IS NEEDED").AddButton("Exit Game", () => {
+              Application.Quit();
+            }).IsNestedPopupWithBuiltInFader().SetAlwaysOnTop().Render();
+          } else {
+            GenericPopup popup = GenericPopupBuilder.Create("ШО ТО ТАКИ ПОШЛО НЕ ТАК", "Отключаю все нафиг. НУЖНО ПЕРЕЗАПУСТИТЬ ИГРУ").AddButton("ВЫЙТИ ИЗ ИГРЫ", () => {
+              Application.Quit();
+            }).IsNestedPopupWithBuiltInFader().SetAlwaysOnTop().Render();
+          }
+        } else
         if (PLEASE_RESTART) {
-          GenericPopup popup = GenericPopupBuilder.Create("RESTART NEEDED", "PLEASE, CONSIDER GAME RESTART").IsNestedPopupWithBuiltInFader().SetAlwaysOnTop().Render();
+          if (Localize.Strings.CurrentCulture != Localize.Strings.Culture.CULTURE_RU_RU) {
+            GenericPopup popup = GenericPopupBuilder.Create("RESTART NEEDED", "RESTART IS NEEDED").AddButton("Exit Game", () => {
+              Application.Quit();
+            }).IsNestedPopupWithBuiltInFader().SetAlwaysOnTop().Render();
+          } else {
+            GenericPopup popup = GenericPopupBuilder.Create("ТАКИ НУЖНО ПЕРЕЗАПУСТИТЬСЯ", "НУЖНО ПЕРЕЗАПУСТИТЬ ИГРУ").AddButton("ВЫЙТИ ИЗ ИГРЫ", () => {
+              Application.Quit();
+            }).IsNestedPopupWithBuiltInFader().SetAlwaysOnTop().Render();
+          }
         }
       }
     }
@@ -1127,43 +1252,21 @@ namespace CustomPrewarm {
         return true;
       }
     }
-    public static bool Prefix(MainMenu __instance, MessageCenterMessage message, ref bool __result, GameObject ___mainNavPanel, HBSButton ____continueButton, HBSButton ___campaignLoadButton, HBSButton ___careerLoadButton, HBSButton ___skirmishLoadButton, HBSButton ____careerContinueButton, GameObject ___refreshingSavesSpinner, MessageCenter ____messageCenter) {
-      if (Core.Settings.UseFastPreloading == false) { return true; }
-      if (Core.CacheLoadingInited) { return true; }
-      __result = true;
+    public static void Postfix(MainMenu __instance, MessageCenterMessage message) {
+      if (Core.Settings.UseFastPreloading == false) { return; }
+      if (Core.CacheLoadingInited) { return; }
+      //__result = true;
       try {
         Log.M?.TWL(0, "MainMenu.ShowRefreshingSaves", true);
-        BattleTech.Save.SaveGameStructure.SaveGameStructure saveStructure = Traverse.Create(__instance).Property<BattleTech.Save.SaveGameStructure.SaveGameStructure>("saveStructure").Value;
-        if (____continueButton != null)
-          ____continueButton.SetState(ButtonState.Disabled);
-        if (___campaignLoadButton != null)
-          ___campaignLoadButton.SetState(ButtonState.Disabled);
-        if (___skirmishLoadButton != null)
-          ___skirmishLoadButton.SetState(ButtonState.Disabled);
-        if (____careerContinueButton != null)
-          ____careerContinueButton.SetState(ButtonState.Disabled);
-        if (___careerLoadButton != null)
-          ___careerLoadButton.SetState(ButtonState.Disabled);
-        if (___mainNavPanel != null && ___mainNavPanel.activeSelf)
-          ___mainNavPanel.SetActive(false);
-        if (___refreshingSavesSpinner != null)
-          ___refreshingSavesSpinner.SetActive(true);
         PrewarmEndMessager messager = __instance.gameObject.GetComponent<PrewarmEndMessager>();
         if (messager == null) { messager = __instance.gameObject.AddComponent<PrewarmEndMessager>(); }
-        messager.WaitingForStart = false;
+        messager.WaitingForStart = 0;
         messager.EnableButtonsDelegate = new d_MainManuEnableButtons(__instance);
-        if (saveStructure.Refreshing) {
-          ____messageCenter.AddFiniteSubscriber(MessageCenterMessageType.SaveGameStructure_StructureRefreshedMessage, messager.StartPrewarm);
-        } else {
-          messager.StartPrewarm(message);
-        }
-        //____messageCenter.AddFiniteSubscriber(MessageCenterMessageType.SaveGameStructure_StructureRefreshedMessage, new ReceiveMessageCenterMessageAutoDelete(this.EnableSkirmishLoadIfSkirmishSaves));
-        //____messageCenter.AddFiniteSubscriber(MessageCenterMessageType.SaveGameStructure_StructureRefreshedMessage, new ReceiveMessageCenterMessageAutoDelete(this.EnableCampaignLoadIfSaves));
-        //____messageCenter.AddFiniteSubscriber(MessageCenterMessageType.SaveGameStructure_StructureRefreshedMessage, new ReceiveMessageCenterMessageAutoDelete(this.EnableCareerLoadIfCareerSaves));
-        return false;
+        messager.StartPrewarm(message);
+        return;
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
-        return true;
+        return;
       }
     }
   }
@@ -1214,15 +1317,19 @@ namespace CustomPrewarm {
       return result.ToString();
     }
     private static bool CallOriginalMethod = false;
+    public static bool Prepare() {
+      return false;
+    }
     public static bool Prefix(SimGameState __instance) {
+      if (__instance == null) { return true; }
       if (CallOriginalMethod) { return true; }
       CallOriginalMethod = true;
-      int state = (int)Traverse.Create(__instance).Field("initState").GetValue();
-      int prevstate = (int)Traverse.Create(__instance).Field("previousInitState").GetValue();
-      Log.M?.TWL(0, "SimGameState.OnStateBitsChanged:" + (prevstate) + ">" + state, true);
-      Log.M?.WL(1, InitStateToString(prevstate), true);
-      Log.M?.WL(1, InitStateToString(state), true);
       try {
+        int state = (int)Traverse.Create(__instance).Field("initState").GetValue();
+        int prevstate = (int)Traverse.Create(__instance).Field("previousInitState").GetValue();
+        Log.M?.TWL(0, "SimGameState.OnStateBitsChanged:" + (prevstate) + ">" + state, true);
+        Log.M?.WL(1, InitStateToString(prevstate), true);
+        Log.M?.WL(1, InitStateToString(state), true);
         Traverse.Create(__instance).Method("OnStateBitsChanged").GetValue();
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);

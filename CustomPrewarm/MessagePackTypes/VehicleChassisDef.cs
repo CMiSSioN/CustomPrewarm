@@ -1,5 +1,6 @@
-﻿using Harmony;
+﻿using HarmonyLib;
 using MessagePack;
+using System;
 using System.Collections.Generic;
 
 namespace CustomPrewarm.Serialize {
@@ -86,34 +87,39 @@ namespace CustomPrewarm.Serialize {
     public float Radius { get; set; } = 0f;
     public VehicleChassisDef() { }
     public VehicleChassisDef(BattleTech.VehicleChassisDef src) {
-      this.LOSSourcePositions = new List<FakeVector3>();
-      foreach (var el in src.LOSSourcePositions) { this.LOSSourcePositions.Add(new FakeVector3(el)); };
-      this.LOSTargetPositions = new List<FakeVector3>();
-      foreach (var el in src.LOSTargetPositions) { this.LOSTargetPositions.Add(new FakeVector3(el)); };
-      this.Locations = new List<VehicleLocationDef>();
-      if (src.Locations != null) {
-        for (int index = 0; index < src.Locations.Length; ++index) {
-          this.Locations.Add(new VehicleLocationDef(src.Locations[index]));
+      try {
+        this.LOSSourcePositions = new List<FakeVector3>();
+        foreach (var el in src.LOSSourcePositions) { this.LOSSourcePositions.Add(new FakeVector3(el)); };
+        this.LOSTargetPositions = new List<FakeVector3>();
+        foreach (var el in src.LOSTargetPositions) { this.LOSTargetPositions.Add(new FakeVector3(el)); };
+        this.Locations = new List<VehicleLocationDef>();
+        if (src.Locations != null) {
+          for (int index = 0; index < src.Locations.Length; ++index) {
+            this.Locations.Add(new VehicleLocationDef(src.Locations[index]));
+          }
         }
+        this.HasTurret = src.HasTurret;
+        this.movementCapDefID = src.movementCapDefID;
+        this.pathingCapDefID = src.pathingCapDefID;
+        this.hardpointDataDefID = src.hardpointDataDefID;
+        this.Description = new DescriptionDef(src.Description);
+        this.PrefabIdentifier = src.PrefabIdentifier;
+        this.PrefabBase = src.PrefabBase;
+        this.Tonnage = src.Tonnage;
+        this.weightClass = src.weightClass;
+        this.BattleValue = src.BattleValue;
+        this.TopSpeed = src.TopSpeed;
+        this.TurnRadius = src.TurnRadius;
+        this.movementType = src.movementType;
+        this.SpotterDistanceMultiplier = src.SpotterDistanceMultiplier;
+        this.VisibilityMultiplier = src.VisibilityMultiplier;
+        this.SensorRangeMultiplier = src.SensorRangeMultiplier;
+        this.Signature = src.Signature;
+        this.Radius = src.Radius;
+      }catch(Exception e) {
+        Log.M_Err?.TWL(0,"VehicleChassisDef "+ src.Description.Id);
+        Log.M_Err?.WL(0,e.ToString());
       }
-      this.HasTurret = src.HasTurret;
-      this.movementCapDefID = src.movementCapDefID;
-      this.pathingCapDefID = src.pathingCapDefID;
-      this.hardpointDataDefID = src.hardpointDataDefID;
-      this.Description = new DescriptionDef(src.Description);
-      this.PrefabIdentifier = src.PrefabIdentifier;
-      this.PrefabBase = src.PrefabBase;
-      this.Tonnage = src.Tonnage;
-      this.weightClass = src.weightClass;
-      this.BattleValue = src.BattleValue;
-      this.TopSpeed = src.TopSpeed;
-      this.TurnRadius = src.TurnRadius;
-      this.movementType = src.movementType;
-      this.SpotterDistanceMultiplier = src.SpotterDistanceMultiplier;
-      this.VisibilityMultiplier = src.VisibilityMultiplier;
-      this.SensorRangeMultiplier = src.SensorRangeMultiplier;
-      this.Signature = src.Signature;
-      this.Radius = src.Radius;
     }
     public object toBT(BattleTech.Data.DataManager dataManager) {
       BattleTech.VehicleChassisDef res = new BattleTech.VehicleChassisDef();

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using Harmony;
+using System.Reflection;
+using System.Reflection.Emit;
+using HarmonyLib;
 using MessagePack;
 
 namespace CustomPrewarm.Serialize {
@@ -129,6 +131,74 @@ namespace CustomPrewarm.Serialize {
         this.DamageLevel);
     }
   }
+  public static class BaseComponentRefHelper {
+    private delegate string d_Field_get(BattleTech.BaseComponentRef src);
+    private delegate void d_Field_set(BattleTech.BaseComponentRef src, string value);
+    private static d_Field_get i_LocalGUID_get = null;
+    private static d_Field_set i_LocalGUID_set = null;
+    private static d_Field_get i_TargetComponentGUID_get = null;
+    private static d_Field_set i_TargetComponentGUID_set = null;
+    public static string LocalGUID(this BattleTech.BaseComponentRef src) {
+      if (i_LocalGUID_get == null) { return string.Empty; }
+      return i_LocalGUID_get(src);
+    }
+    public static void LocalGUID(this BattleTech.BaseComponentRef src, string value) {
+      if (i_LocalGUID_set == null) { return; }
+      i_LocalGUID_set(src, value);
+    }
+    public static string TargetComponentGUID(this BattleTech.BaseComponentRef src) {
+      if (i_TargetComponentGUID_get == null) { return string.Empty; }
+      return i_TargetComponentGUID_get(src);
+    }
+    public static void TargetComponentGUID(this BattleTech.BaseComponentRef src, string value) {
+      if (i_TargetComponentGUID_set == null) { return; }
+      i_TargetComponentGUID_set(src, value);
+    }
+    public static void Prepare() {
+      FieldInfo LocalGUID = typeof(BattleTech.BaseComponentRef).GetField("LocalGUID", BindingFlags.Public | BindingFlags.Instance);
+      Log.M_Err?.WL(1, $"BaseComponentRef.LocalGUID {(LocalGUID == null ? "not found" : "found")}");
+      if (LocalGUID != null) {
+        {
+          var dm = new DynamicMethod("get_LocalGUID", typeof(string), new Type[] { typeof(BattleTech.BaseComponentRef) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldfld, LocalGUID);
+          gen.Emit(OpCodes.Ret);
+          i_LocalGUID_get = (d_Field_get)dm.CreateDelegate(typeof(d_Field_get));
+        }
+        {
+          var dm = new DynamicMethod("set_LocalGUID", null, new Type[] { typeof(BattleTech.BaseComponentRef), typeof(string) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldarg_1);
+          gen.Emit(OpCodes.Stfld, LocalGUID);
+          gen.Emit(OpCodes.Ret);
+          i_LocalGUID_set = (d_Field_set)dm.CreateDelegate(typeof(d_Field_set));
+        }
+      }
+      FieldInfo TargetComponentGUID = typeof(BattleTech.BaseComponentRef).GetField("TargetComponentGUID", BindingFlags.Public | BindingFlags.Instance);
+      Log.M_Err?.WL(1, $"BaseComponentRef.TargetComponentGUID {(TargetComponentGUID == null ? "not found" : "found")}");
+      if (TargetComponentGUID != null) {
+        {
+          var dm = new DynamicMethod("get_TargetComponentGUID", typeof(string), new Type[] { typeof(BattleTech.BaseComponentRef) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldfld, TargetComponentGUID);
+          gen.Emit(OpCodes.Ret);
+          i_TargetComponentGUID_get = (d_Field_get)dm.CreateDelegate(typeof(d_Field_get));
+        }
+        {
+          var dm = new DynamicMethod("set_TargetComponentGUID", null, new Type[] { typeof(BattleTech.BaseComponentRef), typeof(string) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldarg_1);
+          gen.Emit(OpCodes.Stfld, TargetComponentGUID);
+          gen.Emit(OpCodes.Ret);
+          i_TargetComponentGUID_set = (d_Field_set)dm.CreateDelegate(typeof(d_Field_set));
+        }
+      }
+    }
+  }
   [MessagePackObject]
   public class BaseComponentRef {
     [Key(0)]
@@ -147,6 +217,10 @@ namespace CustomPrewarm.Serialize {
     public int HardpointSlot { get; set; } = -1;
     [Key(7)]
     public bool IsFixed { get; set; } = false;
+    [Key(8)]
+    public string LocalGUID { get; set; } = string.Empty;
+    [Key(9)]
+    public string TargetComponentGUID { get; set; } = string.Empty;
     public BaseComponentRef() {}
     public BaseComponentRef(BattleTech.BaseComponentRef src) {
       this.ComponentDefType = src.ComponentDefType;
@@ -157,6 +231,8 @@ namespace CustomPrewarm.Serialize {
       this.IsFixed = src.IsFixed;
       this.ComponentDefID = src.ComponentDefID;
       this.SimGameUID = src.SimGameUID;
+      this.LocalGUID = src.LocalGUID();
+      this.TargetComponentGUID = src.TargetComponentGUID();
     }
     public void fill(BattleTech.BaseComponentRef trg, BattleTech.Data.DataManager dataManager) {
       trg.dataManager = dataManager;
@@ -168,11 +244,13 @@ namespace CustomPrewarm.Serialize {
       trg.IsFixed = this.IsFixed;
       trg.ComponentDefID = this.ComponentDefID;
       trg.SimGameUID = this.SimGameUID;
+      trg.LocalGUID(this.LocalGUID);
+      trg.TargetComponentGUID(this.TargetComponentGUID);
     }
   }
   [MessagePackObject]
   public class MechComponentRef : BaseComponentRef {
-    [Key(8)]
+    [Key(10)]
     public BattleTech.ChassisLocations MountedLocation { get; set; } = BattleTech.ChassisLocations.None;
     public MechComponentRef() {}
     public MechComponentRef(BattleTech.MechComponentRef src) : base((BattleTech.BaseComponentRef)src) { 

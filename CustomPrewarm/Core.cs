@@ -1,5 +1,8 @@
-﻿using Harmony;
+﻿using CustomPrewarm.Serialize;
+using HarmonyLib;
+using Localize;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -33,6 +36,18 @@ namespace CustomPrewarm.Serialize {
       } catch (Exception e) {
         Log.M.TWL(0, e.ToString(), true);
       }
+    }
+    public static CPSettings DefaultSettings() {
+      return Core.GlobalSettings;
+    }
+    public static CPSettings CurrentSettings() {
+      return Core.Settings;
+    }
+    public static string SaveSettings(object settings) {
+      CPSettings set = settings as CPSettings;
+      if (set == null) { set = Core.GlobalSettings; }
+      JObject jsettigns = JObject.FromObject(set);
+      return jsettigns.ToString(Formatting.Indented);
     }
   }
   public interface ISerializable {
@@ -223,6 +238,9 @@ namespace CustomPrewarm.Serialize {
       }
     }
     public static void Refresh(HBS.Util.IJsonTemplated source, BattleTech.Data.DataManager dataManager) {
+      if (source == null) {
+        return;
+      }
       if (source is BattleTech.AbilityDef abilityDef) {
         abilityDef.dataManager = dataManager;
       } else
@@ -292,6 +310,18 @@ namespace CustomPrewarm.Serialize {
 namespace CustomPrewarm{
   public class CPSettings {
     public bool debugLog { get; set; } = false;
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_EN_US, "Use cache")]
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_RU_RU, "Использовать кэш")]
+    [CustomSettings.IsLocalSetting()]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_EN_US, "At first launch after restart, when option is enabled, cache will be gathered. On next launches instead of reading multiply JSON files, only one cache file will be readed. ")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_EN_US, "For RogueTech it can reduce save loading time twice. Other lesser modpacks can get less advantages from this option enabled")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "Контролирует использование кэша. ")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "При первом запуске после включения будет собран кэш. ")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "При последующих запусках вместо чтения с диска многочисленных JSON файлов, будет проиходить чтение кэша. ")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "Для RogueTech это сокращает время загрузки сейвов приблизительно в два раза. Для меньших модпаков эффект может быть менее значительным или вообще отсутствовать")]
+    [CustomSettings.LocalSettingValues(true, false)]
+    [CustomSettings.LocalSettingValuesNames(Strings.Culture.CULTURE_EN_US, "Yes", "No")]
+    [CustomSettings.LocalSettingValuesNames(Strings.Culture.CULTURE_RU_RU, "Да", "Нет")]
     public bool UseFastPreloading { get; set; } = false;
     public bool UseHashedPreloading { get; set; } = false;
     public int ModTekIndexingDelay { get; set; } = 1000;
@@ -311,6 +341,7 @@ namespace CustomPrewarm{
     public Func<string, object> gatherObjectCallback { get; set; } = null;
   }
   public static class Core {
+    internal static Dictionary<string, string> prewarmAssembles = new Dictionary<string, string>();
     public static bool CacheLoadingInited = false;
     private static Dictionary<BattleTech.BattleTechResourceType, Dictionary<string, Dictionary<string, object>>> deserializedObjects = new Dictionary<BattleTech.BattleTechResourceType, Dictionary<string, Dictionary<string, object>>>();
     public static void registerDeserializedObjects(BattleTech.BattleTechResourceType resType, string id, Dictionary<string, object> deserialized) {
@@ -357,13 +388,35 @@ namespace CustomPrewarm{
     public static bool disableFromJSON { get; set; } = false;
     public static CPSettings Settings { get; set; }
     public static CPSettings GlobalSettings { get; set; }
+    private static Assembly ResolveAssembly(System.Object sender, ResolveEventArgs evt) {
+      Assembly res = null;
+      try {
+        Log.M?.TWL(0, "request resolve assembly:" + evt.Name);
+        AssemblyName assemblyName = new AssemblyName(evt.Name);
+        if (prewarmAssembles.TryGetValue(assemblyName.Name, out string path)) {
+          Log.M?.WL(1, "loading prewarm assembly:" + path);
+          res = Assembly.LoadFile(path);
+        } else {
+          Log.M?.WL(1, "not a prewarm assembly");
+        }
+      } catch (Exception err) {
+        Log.M?.TWL(0, err.ToString(), true);
+      }
+      return res;
+    }
     public static void FinishedLoading(List<string> loadOrder) {
       Log.M_Err?.TWL(0, "FinishedLoading", true);
       try {
-        var harmony = HarmonyInstance.Create("io.kmission.fastload");
+        var harmony = new Harmony("io.kmission.fastload");
         harmony.PatchAll(Assembly.GetExecutingAssembly());
         CustomTranslation.Core.RegisterResetCache(MainMenu_ShowRefreshingSaves.ResetCache);
-        CustomSettings.ModsLocalSettingsHelper.RegisterLocalSettings("CustomPrewarm", "Custom Cache", Serialize.LocalSettingsHelper.ResetSettings, Serialize.LocalSettingsHelper.ReadSettings);
+        CustomSettings.ModsLocalSettingsHelper.RegisterLocalSettings("CustomPrewarm", "Custom Prewarm"
+          , Serialize.LocalSettingsHelper.ResetSettings
+          , Serialize.LocalSettingsHelper.ReadSettings
+          , Serialize.LocalSettingsHelper.DefaultSettings
+          , Serialize.LocalSettingsHelper.CurrentSettings
+          , Serialize.LocalSettingsHelper.SaveSettings
+          );
       } catch (Exception e) {
         Log.M.TWL(0, e.ToString(), true);
       }
@@ -378,27 +431,20 @@ namespace CustomPrewarm{
         Core.Settings = JsonConvert.DeserializeObject<CPSettings>(settingsJson);
         Core.GlobalSettings = JsonConvert.DeserializeObject<CPSettings>(settingsJson);
         Core.Settings.directory = directory;
-        string codeBase = typeof(BattleTech.Data.DataManager).Assembly.CodeBase;
-        UriBuilder uri = new UriBuilder(codeBase);
-        string path = Uri.UnescapeDataString(uri.Path);
-        string dllDir = Path.GetDirectoryName(path);
-        Log.M_Err?.WL(1,"game dlls dir:"+dllDir);
-        codeBase = Assembly.GetExecutingAssembly().CodeBase;
-        uri = new UriBuilder(codeBase);
-        path = Uri.UnescapeDataString(uri.Path);
-        string selfName = Path.GetFileName(path);
-        Log.M_Err?.WL(1, "self dll name" + selfName);
-
-        string[] dlls = Directory.GetFiles(directory, "*.dll", SearchOption.TopDirectoryOnly);
-        foreach(string dllName in dlls) {
-          if (Path.GetFileName(dllName) == selfName) { continue; }
-          string trgPath = Path.Combine(dllDir, Path.GetFileName(dllName));
-          if (File.Exists(trgPath)) { continue; }
-          Log.M_Err?.WL(1, "copy");
-          Log.M_Err?.WL(2, dllName);
-          Log.M_Err?.WL(2, trgPath);
-          File.Copy(dllName, trgPath);
+        StatisticEffectDataHelper.Prepare();
+        BaseComponentRefHelper.Prepare();
+        EffectDurationDataHelper.Prepare();
+        foreach (string assemblyPath in Directory.GetFiles(directory, "*.dll", SearchOption.AllDirectories)) {
+          try {
+            string name = AssemblyName.GetAssemblyName(assemblyPath).Name;
+            prewarmAssembles.Add(name, assemblyPath);
+            Log.M?.WL(1, $"'{name}' '{assemblyPath}'");
+          } catch (Exception e) {
+            Log.M_Err?.TWL(0, e.ToString(), true);
+          }
         }
+        AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += ResolveAssembly;
+        AppDomain.CurrentDomain.AssemblyResolve += ResolveAssembly;
 
         //Assembly SystemRuntime = AppDomain.CurrentDomain.Load(Path.Combine(directory, "System.Runtime.dll"));
         //if (SystemRuntime != null) {

@@ -1,6 +1,9 @@
-﻿using Harmony;
+﻿using HarmonyLib;
 using MessagePack;
+using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Reflection.Emit;
 
 namespace CustomPrewarm.Serialize {
   [MessagePackObject]
@@ -85,22 +88,26 @@ namespace CustomPrewarm.Serialize {
     public bool clearedWhenAttacked = false;
     [Key(8)]
     public bool activeTrackedEffect = false;
+    [Key(9)]
+    public string stackId = string.Empty;
     public object toBT() {
-      return new BattleTech.EffectDurationData() {
-        duration = this.duration,
-        ticksOnActivations = this.ticksOnActivations,
-        useActivationsOfTarget = this.useActivationsOfTarget,
-        ticksOnEndOfRound = this.ticksOnEndOfRound,
-        ticksOnMovements = this.ticksOnMovements,
-        stackLimit = this.stackLimit,
-        uniqueEffectIdStackLimit = this.uniqueEffectIdStackLimit,
-        clearedWhenAttacked = this.clearedWhenAttacked,
-        activeTrackedEffect = this.activeTrackedEffect
-      };
+      BattleTech.EffectDurationData result = new BattleTech.EffectDurationData();
+      result.duration = this.duration;
+      result.ticksOnActivations = this.ticksOnActivations;
+      result.useActivationsOfTarget = this.useActivationsOfTarget;
+      result.ticksOnEndOfRound = this.ticksOnEndOfRound;
+      result.ticksOnMovements = this.ticksOnMovements;
+      result.stackLimit = this.stackLimit;
+      result.uniqueEffectIdStackLimit = this.uniqueEffectIdStackLimit;
+      result.clearedWhenAttacked = this.clearedWhenAttacked;
+      result.activeTrackedEffect = this.activeTrackedEffect;
+      result.stackId(this.stackId);
+      return result;
     }
     public EffectDurationData() { }
     public EffectDurationData(BattleTech.EffectDurationData source) {
       if (source == null) { return; }
+      duration = source.duration;
       ticksOnActivations = source.ticksOnActivations;
       useActivationsOfTarget = source.useActivationsOfTarget;
       ticksOnEndOfRound = source.ticksOnEndOfRound;
@@ -109,6 +116,174 @@ namespace CustomPrewarm.Serialize {
       uniqueEffectIdStackLimit = source.uniqueEffectIdStackLimit;
       clearedWhenAttacked = source.clearedWhenAttacked;
       activeTrackedEffect = source.activeTrackedEffect;
+      stackId = source.stackId();
+    }
+  }
+  public static class EffectDurationDataHelper {
+    private delegate string d_Field_get(BattleTech.EffectDurationData src);
+    private delegate void d_Field_set(BattleTech.EffectDurationData src, string value);
+    private static d_Field_get i_stackId_get = null;
+    private static d_Field_set i_stackId_set = null;
+    public static string stackId(this BattleTech.EffectDurationData src) {
+      if (i_stackId_get == null) { return string.Empty; }
+      return i_stackId_get(src);
+    }
+    public static void stackId(this BattleTech.EffectDurationData src, string value) {
+      if (i_stackId_set == null) { return; }
+      i_stackId_set(src, value);
+    }
+    public static void Prepare() {
+      FieldInfo stackId = typeof(BattleTech.EffectDurationData).GetField("stackId", BindingFlags.Public | BindingFlags.Instance);
+      Log.M_Err?.WL(1, $"EffectDurationData.stackId {(stackId == null ? "not found" : "found")}");
+      if (stackId != null) {
+        {
+          var dm = new DynamicMethod("get_stackId", typeof(string), new Type[] { typeof(BattleTech.EffectDurationData) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldfld, stackId);
+          gen.Emit(OpCodes.Ret);
+          i_stackId_get = (d_Field_get)dm.CreateDelegate(typeof(d_Field_get));
+        }
+        {
+          var dm = new DynamicMethod("set_stackId", null, new Type[] { typeof(BattleTech.EffectDurationData), typeof(string) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldarg_1);
+          gen.Emit(OpCodes.Stfld, stackId);
+          gen.Emit(OpCodes.Ret);
+          i_stackId_set = (d_Field_set)dm.CreateDelegate(typeof(d_Field_set));
+        }
+      }
+    }
+  }
+  public static class StatisticEffectDataHelper {
+    private delegate string d_Field_get(BattleTech.StatisticEffectData src);
+    private delegate void d_Field_set(BattleTech.StatisticEffectData src, string value);
+    private static d_Field_get i_Location_get = null;
+    private static d_Field_set i_Location_set = null;
+    private static d_Field_get i_ShouldNotHaveTags_get = null;
+    private static d_Field_set i_ShouldNotHaveTags_set = null;
+    private static d_Field_get i_ShouldHaveTags_get = null;
+    private static d_Field_set i_ShouldHaveTags_set = null;
+    private static d_Field_get i_abilifierId_get = null;
+    private static d_Field_set i_abilifierId_set = null;
+    public static string abilifierId(this BattleTech.StatisticEffectData src) {
+      if (i_abilifierId_get == null) { return string.Empty; }
+      return i_abilifierId_get(src);
+    }
+    public static void abilifierId(this BattleTech.StatisticEffectData src, string value) {
+      if (i_abilifierId_set == null) { return; }
+      i_abilifierId_set(src, value);
+    }
+    public static string Location(this BattleTech.StatisticEffectData src) {
+      if (i_Location_get == null) { return string.Empty; }
+      return i_Location_get(src);
+    }
+    public static void Location(this BattleTech.StatisticEffectData src, string value) {
+      if (i_Location_set == null) { return; }
+      i_Location_set(src, value);
+    }
+    public static string ShouldNotHaveTags(this BattleTech.StatisticEffectData src) {
+      if (i_ShouldNotHaveTags_get == null) { return string.Empty; }
+      return i_ShouldNotHaveTags_get(src);
+    }
+    public static void ShouldNotHaveTags(this BattleTech.StatisticEffectData src, string value) {
+      if (i_ShouldNotHaveTags_set == null) { return; }
+      i_ShouldNotHaveTags_set(src,value);
+    }
+    public static string ShouldHaveTags(this BattleTech.StatisticEffectData src) {
+      if (i_ShouldHaveTags_get == null) { return string.Empty; }
+      return i_ShouldHaveTags_get(src);
+    }
+    public static void ShouldHaveTags(this BattleTech.StatisticEffectData src, string value) {
+      if (i_ShouldHaveTags_set == null) { return; }
+      i_ShouldHaveTags_set(src,value);
+    }
+    public static void Prepare() {
+      FieldInfo Location = typeof(BattleTech.StatisticEffectData).GetField("Location", BindingFlags.Public | BindingFlags.Instance);
+      Log.M_Err?.WL(1, $"StatisticEffectData.Location {(Location == null ? "not found" : "found")}");
+      if (Location != null) {
+        {
+          var dm = new DynamicMethod("get_Location", typeof(string), new Type[] { typeof(BattleTech.StatisticEffectData) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldfld, Location);
+          gen.Emit(OpCodes.Ret);
+          i_Location_get = (d_Field_get)dm.CreateDelegate(typeof(d_Field_get));
+        }
+        {
+          var dm = new DynamicMethod("set_Location", null, new Type[] { typeof(BattleTech.StatisticEffectData), typeof(string) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldarg_1);
+          gen.Emit(OpCodes.Stfld, Location);
+          gen.Emit(OpCodes.Ret);
+          i_Location_set = (d_Field_set)dm.CreateDelegate(typeof(d_Field_set));
+        }
+      }
+      FieldInfo ShouldHaveTags = typeof(BattleTech.StatisticEffectData).GetField("ShouldHaveTags", BindingFlags.Public | BindingFlags.Instance);
+      Log.M_Err?.WL(1, $"StatisticEffectData.ShouldHaveTags {(ShouldHaveTags == null ? "not found" : "found")}");
+      if (ShouldHaveTags != null) {
+        {
+          var dm = new DynamicMethod("get_ShouldHaveTags", typeof(string), new Type[] { typeof(BattleTech.StatisticEffectData) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldfld, ShouldHaveTags);
+          gen.Emit(OpCodes.Ret);
+          i_ShouldHaveTags_get = (d_Field_get)dm.CreateDelegate(typeof(d_Field_get));
+        }
+        {
+          var dm = new DynamicMethod("set_ShouldHaveTags", null, new Type[] { typeof(BattleTech.StatisticEffectData), typeof(string) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldarg_1);
+          gen.Emit(OpCodes.Stfld, ShouldHaveTags);
+          gen.Emit(OpCodes.Ret);
+          i_ShouldHaveTags_set = (d_Field_set)dm.CreateDelegate(typeof(d_Field_set));
+        }
+      }
+      FieldInfo ShouldNotHaveTags = typeof(BattleTech.StatisticEffectData).GetField("ShouldNotHaveTags", BindingFlags.Public | BindingFlags.Instance);
+      Log.M_Err?.WL(1, $"StatisticEffectData.ShouldNotHaveTags {(ShouldNotHaveTags == null ? "not found" : "found")}");
+      if (ShouldNotHaveTags != null) {
+        {
+          var dm = new DynamicMethod("get_ShouldNotHaveTags", typeof(string), new Type[] { typeof(BattleTech.StatisticEffectData) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldfld, ShouldNotHaveTags);
+          gen.Emit(OpCodes.Ret);
+          i_ShouldNotHaveTags_get = (d_Field_get)dm.CreateDelegate(typeof(d_Field_get));
+        }
+        {
+          var dm = new DynamicMethod("set_ShouldNotHaveTags", null, new Type[] { typeof(BattleTech.StatisticEffectData), typeof(string) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldarg_1);
+          gen.Emit(OpCodes.Stfld, ShouldNotHaveTags);
+          gen.Emit(OpCodes.Ret);
+          i_ShouldNotHaveTags_set = (d_Field_set)dm.CreateDelegate(typeof(d_Field_set));
+        }
+      }
+      FieldInfo abilifierId = typeof(BattleTech.StatisticEffectData).GetField("abilifierId", BindingFlags.Public | BindingFlags.Instance);
+      Log.M_Err?.WL(1, $"StatisticEffectData.abilifierId {(abilifierId == null ? "not found" : "found")}");
+      if (abilifierId != null) {
+        {
+          var dm = new DynamicMethod("get_abilifierId", typeof(string), new Type[] { typeof(BattleTech.StatisticEffectData) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldfld, abilifierId);
+          gen.Emit(OpCodes.Ret);
+          i_abilifierId_get = (d_Field_get)dm.CreateDelegate(typeof(d_Field_get));
+        }
+        {
+          var dm = new DynamicMethod("set_abilifierId", null, new Type[] { typeof(BattleTech.StatisticEffectData), typeof(string) });
+          var gen = dm.GetILGenerator();
+          gen.Emit(OpCodes.Ldarg_0);
+          gen.Emit(OpCodes.Ldarg_1);
+          gen.Emit(OpCodes.Stfld, abilifierId);
+          gen.Emit(OpCodes.Ret);
+          i_abilifierId_set = (d_Field_set)dm.CreateDelegate(typeof(d_Field_set));
+        }
+      }
     }
   }
   [MessagePackObject]
@@ -137,6 +312,14 @@ namespace CustomPrewarm.Serialize {
     public string targetAmmoCategoryID = string.Empty;
     [Key(11)]
     public BattleTech.WeaponSubType targetWeaponSubType = BattleTech.WeaponSubType.NotSet;
+    [Key(12)]
+    public string Location = string.Empty;
+    [Key(13)]
+    public string ShouldHaveTags = string.Empty;
+    [Key(14)]
+    public string ShouldNotHaveTags = string.Empty;
+    [Key(15)]
+    public string abilifierId = string.Empty;
     public StatisticEffectData() { }
     public object toBT() {
       BattleTech.StatisticEffectData result = new BattleTech.StatisticEffectData();
@@ -152,6 +335,10 @@ namespace CustomPrewarm.Serialize {
       result.targetWeaponSubType = this.targetWeaponSubType;
       result.targetWeaponCategoryID = this.targetWeaponCategoryID;
       result.targetAmmoCategoryID = this.targetAmmoCategoryID;
+      result.Location(this.Location);
+      result.ShouldHaveTags(this.ShouldHaveTags);
+      result.ShouldNotHaveTags(this.ShouldNotHaveTags);
+      result.abilifierId(this.abilifierId);
       return result;
     }
     public StatisticEffectData(BattleTech.StatisticEffectData source) {
@@ -168,6 +355,10 @@ namespace CustomPrewarm.Serialize {
       targetWeaponSubType = source.targetWeaponSubType;
       targetWeaponCategoryID = source.TargetWeaponCategoryValue.Name;
       targetAmmoCategoryID = source.TargetAmmoCategoryValue.Name;
+      Location = source.Location();
+      ShouldNotHaveTags = source.ShouldNotHaveTags();
+      ShouldHaveTags = source.ShouldHaveTags();
+      abilifierId = source.abilifierId();
     }
   }
   [MessagePackObject]
