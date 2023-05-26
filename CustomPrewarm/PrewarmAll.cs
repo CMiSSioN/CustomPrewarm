@@ -2,6 +2,7 @@
 using BattleTech.Data;
 using BattleTech.Save;
 using BattleTech.Save.Core;
+using BattleTech.Save.Test;
 using BattleTech.UI;
 using BattleTech.UI.TMProWrapper;
 using CustomComponents;
@@ -15,6 +16,7 @@ using MessagePack.Resolvers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
@@ -139,8 +141,30 @@ namespace CustomPrewarm {
     }
     public static void AddToDataManager<T>(DataManager dataManager, BattleTechResourceType resType, string id, IJsonTemplated data) where T : IJsonTemplated {
       try {
-        object store = Traverse.Create(dataManager).Field(FastDataLoadHelper.PrewarmDelegate.GetStoreNameFromBattletechResource(resType)).GetValue();
-        Traverse.Create(store).Method("Add", new Type[] { typeof(string), FastDataLoadHelper.PrewarmDelegate.GetTypeFromBattletechResource(resType) }, new object[] { id, data }).GetValue();
+        switch (resType) {
+          case BattleTechResourceType.AbilityDef: { dataManager.abilityDefs.Add(id, (AbilityDef)data); }; break;
+          case BattleTechResourceType.AmmunitionBoxDef: { dataManager.ammoBoxDefs.Add(id, (AmmunitionBoxDef)data); }; break;
+          case BattleTechResourceType.BackgroundDef: { dataManager.backgroundDefs.Add(id, (BackgroundDef)data); }; break;
+          case BattleTechResourceType.BaseDescriptionDef: { dataManager.baseDescriptionDefs.Add(id, (BaseDescriptionDef)data); }; break;
+          case BattleTechResourceType.BuildingDef: { dataManager.buildingDefs.Add(id, (BuildingDef)data); }; break;
+          case BattleTechResourceType.CastDef: { dataManager.castDefs.Add(id, (CastDef)data); }; break;
+          case BattleTechResourceType.ChassisDef: { dataManager.chassisDefs.Add(id, (ChassisDef)data); }; break;
+          case BattleTechResourceType.DesignMaskDef: { dataManager.designMaskDefs.Add(id, (DesignMaskDef)data); }; break;
+          case BattleTechResourceType.HardpointDataDef: { dataManager.hardpointDataDefs.Add(id, (HardpointDataDef)data); }; break;
+          case BattleTechResourceType.HeatSinkDef: { dataManager.heatSinkDefs.Add(id, (HeatSinkDef)data); }; break;
+          case BattleTechResourceType.JumpJetDef: { dataManager.jumpJetDefs.Add(id, (JumpJetDef)data); }; break;
+          case BattleTechResourceType.LanceDef: { dataManager.lanceDefs.Add(id, (LanceDef)data); }; break;
+          case BattleTechResourceType.MechDef: { dataManager.mechDefs.Add(id, (MechDef)data); }; break;
+          case BattleTechResourceType.MovementCapabilitiesDef: { dataManager.movementCapDefs.Add(id, (MovementCapabilitiesDef)data); }; break;
+          case BattleTechResourceType.PathingCapabilitiesDef: { dataManager.pathingCapDefs.Add(id, (PathingCapabilitiesDef)data); }; break;
+          case BattleTechResourceType.PilotDef: { dataManager.pilotDefs.Add(id, (PilotDef)data); }; break;
+          case BattleTechResourceType.StarSystemDef: { dataManager.systemDefs.Add(id, (StarSystemDef)data); }; break;
+          case BattleTechResourceType.TurretChassisDef: { dataManager.turretChassisDefs.Add(id, (TurretChassisDef)data); }; break;
+          case BattleTechResourceType.UpgradeDef: { dataManager.upgradeDefs.Add(id, (UpgradeDef)data); }; break;
+          case BattleTechResourceType.VehicleChassisDef: { dataManager.vehicleChassisDefs.Add(id, (VehicleChassisDef)data); }; break;
+          case BattleTechResourceType.VehicleDef: { dataManager.vehicleDefs.Add(id, (VehicleDef)data); }; break;
+          case BattleTechResourceType.WeaponDef: { dataManager.weaponDefs.Add(id, (WeaponDef)data); }; break;
+        }
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
       }
@@ -1067,7 +1091,9 @@ namespace CustomPrewarm {
         }
         try {
           dataManager = SceneSingletonBehavior<DataManagerUnityInstance>.Instance.DataManager;
-          ReadCacheFile(p, dataManager, cachepath);
+          if (Core.Settings.UseFastPreloading) {
+            ReadCacheFile(p, dataManager, cachepath);
+          }
         } catch (Exception e) {
           PLEASE_DISABLE = true;
           Log.M?.TWL(0, "Prewarm ended warning", true);
@@ -1087,6 +1113,114 @@ namespace CustomPrewarm {
       public int WaitingForStart { get; set; } = 0;
       public int WaitingForSaves { get; set; } = 0;
       public GameObject refreshingSavesSpinner { get; set; } = null;
+      public void addtoJson(JToken dump, AssetBundle bundle, bool is_async) {
+        dump["dump"] = true;
+        JArray content = dump["content"] as JArray;
+        //Log.M?.WL(0, $"{bundle.name} {(is_async ? "loaded":"existing")}");
+        foreach (var name in bundle.GetAllAssetNames()) {
+          //Log.M?.WL(1, $"{go.name}");
+          content.Add(name);
+        }
+        JArray manifest = dump["manifest"] as JArray;
+        JArray manifest_existing = dump["manifest_existing"] as JArray;
+        JArray manifest_missing = dump["manifest_missing"] as JArray;
+        foreach(var name in manifest) {
+          var obj = bundle.LoadAsset((string)name);
+          if (obj == null) { manifest_missing.Add(name); } else { manifest_existing.Add(name); }
+        }
+        //Log.M?.WL(0, $"", true);
+      }
+      public bool is_requesting_assemblies { get; set; } = false;
+      public void Awake() {
+        is_requesting_assemblies = false;
+      }
+      public void GatherAssetsBundlesInfo() {
+        if (is_requesting_assemblies) { return; }
+        Log.M?.TWL(0, "LOADING ALL ASSET BUNDLES");
+        is_requesting_assemblies = true;
+        EnableButtonsDelegate.refreshingSavesPercentageMessage.SetText("DUMP ALL ASSETBUNDLES");
+        JObject dump = new JObject();
+        var assetsManifest = UnityGameInstance.BattleTechGame.DataManager.ResourceLocator.AllEntriesOfResource(BattleTechResourceType.AssetBundle);
+        int counter = 0;
+        foreach (var assetManifest in assetsManifest) {
+          if (File.Exists(assetManifest.FilePath) == false) {
+            Log.M?.WL(0, $"{assetManifest.FilePath} does not exists");
+            continue;
+          }
+          if (assetManifest.FilePath.EndsWith("assetbundles-info")) { continue; }
+          if (assetManifest.FilePath.EndsWith("computeshaders")) { continue; }
+          if (assetManifest.FilePath.EndsWith("shaders")) { continue; }
+          dump[assetManifest.Id] = new JObject();
+          dump[assetManifest.Id]["name"] = assetManifest.Id;
+          dump[assetManifest.Id]["filename"] = assetManifest.FilePath;
+          dump[assetManifest.Id]["dump"] = false;
+          dump[assetManifest.Id]["content"] = new JArray();
+          dump[assetManifest.Id]["manifest"] = new JArray();
+          dump[assetManifest.Id]["manifest_missing"] = new JArray();
+          dump[assetManifest.Id]["manifest_existing"] = new JArray();
+          ++counter;
+        }
+        var prefabsManifest = UnityGameInstance.BattleTechGame.DataManager.ResourceLocator.AllEntriesOfResource(BattleTechResourceType.Prefab);
+        foreach (var prefabManifest in prefabsManifest) {
+          if (prefabManifest.IsAssetBundled == false) { continue; }
+          var assetJson = dump[prefabManifest.AssetBundleName];
+          if (assetJson == null) { continue; }
+          JArray manifest = assetJson["manifest"] as JArray;
+          manifest.Add(prefabManifest.Id);
+        }
+        this.StartCoroutine(this.GatherAssetsBundlesInfoRoutine(dump, counter));
+      }
+      public IEnumerator GatherAssetsBundlesInfoRoutine(JObject dump, int amount) {
+        int counter = 0;
+        foreach (var assetManifest in dump) {
+          yield return null;
+          string id = assetManifest.Key;
+          bool is_have_dump = (bool)assetManifest.Value["dump"];
+          if (is_have_dump) { continue; }
+          if (UnityGameInstance.BattleTechGame.DataManager.AssetBundleManager.IsBundleLoaded(id)) {
+            var assetbundle = UnityGameInstance.BattleTechGame.DataManager.AssetBundleManager.GetLoadedAssetBundle(id);
+            //printAssetBundleContent(assetbundle);
+            EnableButtonsDelegate.refreshingSavesPercentageMessage.SetText(id);
+            this.addtoJson(assetManifest.Value, assetbundle, false);
+            ++counter;
+            EnableButtonsDelegate.refreshingSavesPercentageText.SetText($"{counter}/{amount}");
+          } else {
+            Log.M?.WL(0, $"requesting:{id}:{(string)assetManifest.Value["filename"]}");
+            EnableButtonsDelegate.refreshingSavesPercentageMessage.SetText(id);
+            bool in_requesting = true;
+            UnityGameInstance.BattleTechGame.DataManager.AssetBundleManager.RequestBundle(id,
+              (bundle) => {
+                in_requesting = false;
+                this.addtoJson(assetManifest.Value, bundle, true);
+              }
+            );
+            int watchdog = 100;
+            while (in_requesting) {
+              if (watchdog <= 0) {
+                Log.M?.WL(1, $"timeout: {id}", true);
+                break;
+              }
+              --watchdog;
+              yield return new WaitForSeconds(0.1f);
+            }
+            ++counter;
+            EnableButtonsDelegate.refreshingSavesPercentageText.SetText($"{counter}/{amount}");
+          }
+        }
+        foreach(var bundlejson in dump) {
+          JArray missing = bundlejson.Value["manifest_missing"] as JArray;
+          if (missing.Count == 0) { continue; }
+          Log.M?.WL(0, bundlejson.Key);
+          foreach(var missprefab in missing) {
+            Log.M?.WL(1, (string)missprefab);
+          }
+        }
+        Log.M?.TWL(0, "LOADING ALL ASSET BUNDLES END", true);
+        File.WriteAllText(Path.Combine(Log.BaseDirectory, "assetbundlesdump.json"), dump.ToString(Formatting.Indented));
+        EnableButtonsDelegate.EnableButtons(EnableButtonsDelegate.message);
+        EnableButtonsDelegate = null;
+        yield break;
+      }
       public bool StartPrewarm(MessageCenterMessage message) {
         Log.M?.TWL(0, "StartPrewarm");
         EnableButtonsDelegate.message = message;
@@ -1187,8 +1321,12 @@ namespace CustomPrewarm {
           }
           return;
         }
-        EnableButtonsDelegate.EnableButtons(EnableButtonsDelegate.message);
-        EnableButtonsDelegate = null;
+        if (Core.Settings.AssetBundlesValidate) {
+          this.GatherAssetsBundlesInfo();
+        } else {
+          EnableButtonsDelegate?.EnableButtons(EnableButtonsDelegate.message);
+          EnableButtonsDelegate = null;
+        }
         if (PLEASE_DISABLE) {
           Core.Settings.UseFastPreloading = false;
           CustomSettings.ModsLocalSettingsHelper.SaveSettings("CustomPrewarm");
@@ -1240,7 +1378,7 @@ namespace CustomPrewarm {
       public bool EnableButtons(MessageCenterMessage message) {
         try {
           Log.M?.TWL(0, "EnableButtons", true);
-          GameObject mainNavPanel = Traverse.Create(__instance).Field<GameObject>("mainNavPanel").Value;
+          GameObject mainNavPanel = __instance.mainNavPanel;
           if (mainNavPanel != null && !mainNavPanel.activeSelf) { mainNavPanel.SetActive(true); }
           __instance.refreshingSavesSpinner.SetActive(false);
           __instance.EnableSkirmishLoadIfSkirmishSaves(message);
@@ -1253,7 +1391,6 @@ namespace CustomPrewarm {
       }
     }
     public static void Postfix(MainMenu __instance, MessageCenterMessage message) {
-      if (Core.Settings.UseFastPreloading == false) { return; }
       if (Core.CacheLoadingInited) { return; }
       //__result = true;
       try {
@@ -1291,51 +1428,112 @@ namespace CustomPrewarm {
   [HarmonyPatch(MethodType.Normal)]
   [HarmonyPatch(new Type[] { })]
   public static class SimGameState_OnStateBitsChanged {
-    public enum InitStates {
-      UNLOADED = 0,
-      INITIALIZED = 1,
-      DEFS_LOADED = 2,
-      REQUEST_AUTO_HEADLESS_STATE_ON_READY = 3,
-      HEADLESS_ON_READY_SUCCESS = 4,
-      HEADLESS_STATE = 7,
-      ATTACHED_UX_STATE = 8,
-      UX_SYSTEMS_CREATED = 8,
-      FROM_SAVE = 16, // 0x00000010
-      UX_ATTACHED_PREVIOUSLY = 32, // 0x00000020
-      ASYNC_ATTACHING_UX_STATE = 64, // 0x00000040
-      ASYNC_LOADING_DEFS = 128, // 0x00000080
-      REQUEST_ATTACH_UX_STATE = 256, // 0x00000100
-      REQUEST_DEFS_LOAD = 512, // 0x00000200
-      ACTIVELY_SAVING = 1024, // 0x00000400
-      UPDATE_MILESTONE_ON_SAVE_LOADED = 2048, // 0x00000800
-    }
-    public static string InitStateToString(int state) {
-      StringBuilder result = new StringBuilder();
-      foreach (InitStates val in Enum.GetValues(typeof(InitStates))) {
-        if ((state & (int)val) == (int)val) { result.Append(val.ToString() + ","); }
-      }
-      return result.ToString();
-    }
-    private static bool CallOriginalMethod = false;
-    public static bool Prepare() {
-      return false;
-    }
-    public static bool Prefix(SimGameState __instance) {
-      if (__instance == null) { return true; }
-      if (CallOriginalMethod) { return true; }
-      CallOriginalMethod = true;
+    public static void Prefix(SimGameState __instance) {
+      if (__instance == null) { return; }
       try {
-        int state = (int)Traverse.Create(__instance).Field("initState").GetValue();
-        int prevstate = (int)Traverse.Create(__instance).Field("previousInitState").GetValue();
+        var state = __instance.initState;
+        var prevstate = __instance.previousInitState;
         Log.M?.TWL(0, "SimGameState.OnStateBitsChanged:" + (prevstate) + ">" + state, true);
-        Log.M?.WL(1, InitStateToString(prevstate), true);
-        Log.M?.WL(1, InitStateToString(state), true);
-        Traverse.Create(__instance).Method("OnStateBitsChanged").GetValue();
+        Log.M?.WL(1, prevstate.ToString(), true);
+        Log.M?.WL(1, state.ToString(), true);
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
       }
-      CallOriginalMethod = false;
-      return false;
+    }
+    public static void Finalizer(Exception __exception) {
+      if (__exception != null) {
+        Log.M?.TWL(0, __exception.ToString(), true);
+        SimGameState.logger.LogError("I'M JUST A VICTIM HERE!");
+        SimGameState.logger.LogException(__exception);
+      }
+    }
+  }
+  [HarmonyPatch(typeof(SimGameState))]
+  [HarmonyPatch("RemoveItemStat")]
+  [HarmonyPatch(MethodType.Normal)]
+  [HarmonyPatch(new Type[] { typeof(string), typeof(System.Type), typeof(bool) })]
+  public static class SimGameState_RemoveItemStat_0 {
+    public static void Postfix(SimGameState __instance, string id, System.Type type, bool damaged) {
+      if (__instance == null) { return; }
+      try {
+        id = __instance.GetItemStatID(id, type);
+        if (damaged) { id += string.Format(".{0}", (object)"DAMAGED"); }
+        var stat = __instance.companyStats.GetStatistic(id);
+        if (stat == null) { return; }
+        if (stat.Value<int>() <= 0) {
+          SimGameState.logger.LogDebug($"{id} have value {stat.Value<int>()} removing");
+          Log.M?.TWL(0, $"{id} have value {stat.Value<int>()} removing");
+          __instance.companyStats.RemoveStatistic(id);
+        }
+      } catch (Exception e) {
+        Log.M?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
+      }
+    }
+  }
+  [HarmonyPatch(typeof(SimGameState))]
+  [HarmonyPatch("Rehydrate")]
+  [HarmonyPatch(MethodType.Normal)]
+  [HarmonyPatch(new Type[] { typeof(GameInstanceSave) })]
+  public static class SimGameState_Rehydrate {
+    public static void SanitiazeItems(this SimGameState sim) {
+      Log.M?.TWL(0, $"SimGameState.SanitiazeItems");
+      HashSet<string> to_delete = new HashSet<string>();
+      foreach (var stat in sim.companyStats) {
+        if (stat.Key.StartsWith("Item.") == false) { continue; }
+        if (stat.Value.CheckType(typeof(int)) == false) { continue; }
+        if (stat.Value.Value<int>() > 0) { continue; }
+        Log.M?.WL(1, $"{stat.Key}:{stat.Value.value} - deleting");
+      }
+      foreach (var name in to_delete) { sim.CompanyStats.RemoveStatistic(name); }
+    }
+    public static void Postfix(SimGameState __instance, GameInstanceSave gameInstanceSave) {
+      if (__instance == null) { return; }
+      try {
+        __instance.SanitiazeItems();
+      } catch (Exception e) {
+        Log.M?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
+      }
+    }
+  }
+  [HarmonyPatch(typeof(SimGameState))]
+  [HarmonyPatch("Dehydrate")]
+  [HarmonyPatch(MethodType.Normal)]
+  [HarmonyPatch(new Type[] { typeof(SimGameSave), typeof(SerializableReferenceContainer) })]
+  public static class SimGameState_Dehydrate {
+    public static void Prefix(SimGameState __instance, SimGameSave save, SerializableReferenceContainer references) {
+      if (__instance == null) { return; }
+      try {
+        __instance.SanitiazeItems();
+      } catch (Exception e) {
+        Log.M?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
+      }
+    }
+  }
+  [HarmonyPatch(typeof(SimGameState))]
+  [HarmonyPatch("RemoveItemStat")]
+  [HarmonyPatch(MethodType.Normal)]
+  [HarmonyPatch(new Type[] { typeof(string), typeof(string), typeof(bool) })]
+  public static class SimGameState_RemoveItemStat_1 {
+    public static void Postfix(SimGameState __instance, string id, string type, bool damaged) {
+      if (__instance == null) { return; }
+      try {
+        id = __instance.GetItemStatID(id, type);
+        if (damaged) { id += string.Format(".{0}", (object)"DAMAGED"); }
+        var stat = __instance.companyStats.GetStatistic(id);
+        if (stat == null) { return; }
+        if (stat.Value<int>() <= 0) {
+          SimGameState.logger.LogDebug($"{id} have value {stat.Value<int>()} removing");
+          Log.M?.TWL(0, $"{id} have value {stat.Value<int>()} removing");
+          __instance.companyStats.RemoveStatistic(id);
+        }
+      } catch (Exception e) {
+        Log.M?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
+      }
     }
   }
   [HarmonyPatch(typeof(SimGameState))]
@@ -1343,8 +1541,12 @@ namespace CustomPrewarm {
   [HarmonyPatch(MethodType.Normal)]
   [HarmonyPatch(new Type[] { typeof(GameInstance), typeof(SimGameDifficulty) })]
   public static class SimGameState__OnInit {
-    public static void Prefix(SimGameState __instance, GameInstance game, SimGameDifficulty difficulty) {
+    public static void Finalizer(SimGameState __instance, GameInstance game, SimGameDifficulty difficulty, Exception __exception) {
       //FastDataLoadHelper.Reset();
+      if (__exception != null) {
+        SimGameState.logger.LogError("I'M JUST A VICTIM HERE!");
+        SimGameState.logger.LogException(__exception);
+      }
     }
   }
   [HarmonyPatch(typeof(SimGameState))]
@@ -1352,8 +1554,12 @@ namespace CustomPrewarm {
   [HarmonyPatch(MethodType.Normal)]
   [HarmonyPatch(new Type[] { })]
   public static class SimGameState__OnHeadlessComplete {
-    public static void Postfix(SimGameState __instance, ref bool __result) {
+    public static void Finalizer(SimGameState __instance, ref bool __result, Exception __exception) {
       Log.M?.TWL(0, "SimGameState._OnHeadlessComplete:" + __result, true);
+      if (__exception != null) {
+        SimGameState.logger.LogError("I'M JUST A VICTIM HERE!");
+        SimGameState.logger.LogException(__exception);
+      }
     }
   }
   [HarmonyPatch(typeof(SimGameState))]
@@ -1361,36 +1567,34 @@ namespace CustomPrewarm {
   [HarmonyPatch(MethodType.Normal)]
   [HarmonyPatch(new Type[] { })]
   public static class SimGameState_HandleSaveHydrate {
-    public static void SetInitStateBits(this SimGameState sim, int flag) {
-      MethodInfo m_SetInitStateBits = typeof(SimGameState).GetMethod("SetInitStateBits", BindingFlags.Instance | BindingFlags.NonPublic);
-      m_SetInitStateBits.Invoke(sim, new object[] { (object)flag });
-    }
-    public static bool Prefix(SimGameState __instance, ref bool __result, ref GameInstanceSave ___save) {
+    public static void Prefix(ref bool __runOriginal, SimGameState __instance, ref bool __result) {
       Log.M?.TWL(0, "SimGameState.HandleSaveHydrate", true);
       try {
-        if (___save == null) { __result = true; return false; }
+        if (__instance.save == null) { __result = true; __runOriginal = false; return; }
         try {
           if (DebugBridge.TestToolsEnabled && BattleTech.Save.SaveGameStructure.SaveGameStructure.ForceSimGameRehydrateFailure) {
-            __result = false; return false;
+            __result = false; __runOriginal = false; return;
           }
-          __instance.Rehydrate(___save);
-          if (___save.SimGameSave.PreviouslyAttachedHeadState) {
+          __instance.Rehydrate(__instance.save);
+          if (__instance.save.SimGameSave.PreviouslyAttachedHeadState) {
             //__instance.SetInitStateBits(SimGameState.InitStates.UX_ATTACHED_PREVIOUSLY);
-            __instance.SetInitStateBits(32);
+            __instance.SetInitStateBits(SimGameState.InitStates.UX_ATTACHED_PREVIOUSLY);
           }
           Log.M?.TWL(0, "SimGameState.HandleSaveHydrate success", true);
-          __result = true; return false;
+          __result = true; __runOriginal = false; return;
         } catch (Exception e) {
           Log.M?.TWL(0, e.ToString(), true);
         } finally {
-          ___save = (GameInstanceSave)null;
+          __instance.save = (GameInstanceSave)null;
         }
         __result = false;
-        return false;
+        __runOriginal = false; return;
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
         __result = false;
-        return false;
+        SimGameState.logger.LogError("I'M JUST A VICTIM HERE!");
+        SimGameState.logger.LogException(e);
+        __runOriginal = false; return;
       }
     }
   }
@@ -1414,7 +1618,7 @@ namespace CustomPrewarm {
       public SimGameState simgame { get; set; }
       public RespondToDefsLoadComplete_delegate(SimGameState simgame) { this.simgame = simgame; }
       public void Invoke(LoadRequest loadRequest) {
-        Traverse.Create(simgame).Method("RespondToDefsLoadComplete").GetValue(loadRequest);
+        simgame.RespondToDefsLoadComplete(loadRequest);
       }
     }
     public static bool Prefix(SimGameState __instance) {
@@ -1457,8 +1661,6 @@ namespace CustomPrewarm {
       Log.M?.TWL(0, "SaveManager:" + __instance.saveSystem.localWriteLocation.rootPath);
       Core.Settings.savesdirectory = Path.Combine(__instance.saveSystem.localWriteLocation.rootPath, "cache");
       if (Directory.Exists(Core.Settings.savesdirectory) == false) { Directory.CreateDirectory(Core.Settings.savesdirectory); };
-      //FixedMechDefHelper.Init(Path.GetDirectoryName(Traverse.Create(Traverse.Create(Traverse.Create(__instance).Field<SaveSystem>("saveSystem").Value).Field<WriteLocation>("localWriteLocation").Value).Field<string>("rootPath").Value));
-      //ModsLocalSettingsHelper.Init(Path.GetDirectoryName(Traverse.Create(Traverse.Create(Traverse.Create(__instance).Field<SaveSystem>("saveSystem").Value).Field<WriteLocation>("localWriteLocation").Value).Field<string>("rootPath").Value));
     }
   }
   public enum FastLoadStage { Preload, Dependencies, RefreshMechs, Final, None }
@@ -1921,122 +2123,18 @@ namespace CustomPrewarm {
       PrewarmDelegate threadItem = param as PrewarmDelegate;
       if (threadItem != null) { threadItem.Load(); }
     }
-    //public static void RespondToDefsLoadComplete(LoadRequest loadRequest) {
-    //  Log.M?.TWL(0, "RespondToDefsLoadComplete success:" + stageWatcher.Elapsed.TotalSeconds);
-    //  try {
-    //    Log.M?.TWL(0, "Autofixing mechs");
-    //    FixedMechDefHelper.AutoFixMechs(simgame);
-    //    Log.M?.TWL(0, "Autofixed mechs:" + stageWatcher.Elapsed.TotalSeconds);
-    //    Reset();
-    //    Traverse.Create(simgame).Method("RespondToDefsLoadComplete", new Type[] { typeof(LoadRequest) }, new object[] { loadRequest }).GetValue();
-    //  } catch (Exception e) {
-    //    Log.M?.TWL(0, e.ToString(), true);
-    //  }
-    //}
     public static void AddAllOfTypeBlindLoadRequestPrewarm(this LoadRequest loadRequest, BattleTechResourceType resourceType, bool? filterByOwnerShip = false) {
       if (prewarmTypes.Contains(resourceType) == false) {
         loadRequest.AddAllOfTypeBlindLoadRequest(resourceType, filterByOwnerShip);
         return;
       }
-      DataManager dataManager = Traverse.Create(loadRequest).Field<DataManager>("dataManager").Value;
+      DataManager dataManager = loadRequest.dataManager;
       foreach (VersionManifestEntry versionManifestEntry in dataManager.ResourceLocator.AllEntriesOfResource(resourceType)) {
         if (versionManifestEntry.IsTemplate) { continue; }
         if (dataManager.Exists(resourceType, versionManifestEntry.Id)) { continue; }
         loadRequest.AddBlindLoadRequest(resourceType, versionManifestEntry.Id, filterByOwnerShip);
       }
     }
-    //public static void Final() {
-    //  Log.M?.TWL(0, "FastDataLoadHelper.Final:" + stageWatcher.Elapsed.TotalSeconds);
-    //  stage = FastLoadStage.Final;
-    //  LoadRequest loadRequest = simgame.DataManager.CreateLoadRequest(new Action<LoadRequest>(RespondToDefsLoadComplete), true);
-    //  try {
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.SimGameEventDef, new bool?(true));
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.StarSystemDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.ContractOverride, new bool?(true));
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.SimGameStringList);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.LifepathNodeDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.ShopDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.FactionDef, new bool?(true));
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.FlashpointDef, new bool?(true));
-    //    foreach (string startingMechWarrior in simgame.Constants.Story.StartingMechWarriors)
-    //      loadRequest.AddBlindLoadRequest(BattleTechResourceType.PilotDef, startingMechWarrior);
-    //    foreach (string mechWarriorPortrait in simgame.Constants.Story.StartingMechWarriorPortraits)
-    //      loadRequest.AddBlindLoadRequest(BattleTechResourceType.PortraitSettings, mechWarriorPortrait);
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.PilotDef, simgame.Constants.Story.DefaultCommanderID);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.MechDef, new bool?(true));
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, "uixTxrIcon_atlas");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, "uixTxrIcon_atlas");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, "uixTxrIcon_atlas");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, "uixTxrIcon_atlas");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, "uixTxrIcon_inOrbit");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, "uixTxrIcon_roomArgo");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, "uixTxrIcon_atlas");
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.HeraldryDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.SimGameConversations);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.CastDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.SimGameSpeakers);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.BackgroundDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.SimGameMilestoneDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.SimGameStatDescDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.AbilityDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.ShipModuleUpgrade);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.SimGameSubstitutionListDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.PortraitSettings);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.AudioEventDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.WeaponDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.AmmunitionDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.AmmunitionBoxDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.HeatSinkDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.UpgradeDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.JumpJetDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.MechDef);
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.VehicleDef);
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SimGameDifficultySettingList, "DifficultySettings");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SimGameDifficultySettingList, "CareerDifficultySettings");
-    //    foreach (SimGameCrew simGameCrew in Enum.GetValues(typeof(SimGameCrew))) {
-    //      string resourceId = string.Format("{0}{1}{2}", (object)"castDef_", (object)simGameCrew.ToString().Substring("Crew_".Length), (object)"Default");
-    //      loadRequest.AddBlindLoadRequest(BattleTechResourceType.CastDef, resourceId);
-    //    }
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.MechDef, simgame.Constants.Story.StartingPlayerMech);
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.GenderedOptionsListDef, simgame.Constants.Pilot.PilotPortraits);
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.GenderedOptionsListDef, simgame.Constants.Pilot.PilotVoices);
-    //    //loadRequest.AddBlindLoadRequest(BattleTechResourceType.MechDef, simgame.Constants.Story.StartingPlayerMech);
-    //    //loadRequest.AddBlindLoadRequest(BattleTechResourceType.GenderedOptionsListDef, simgame.Constants.Pilot.PilotPortraits);
-    //    //loadRequest.AddBlindLoadRequest(BattleTechResourceType.GenderedOptionsListDef, simgame.Constants.Pilot.PilotVoices);
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SVGAsset, "uixSvgIcon_mwrank_Ronin");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SVGAsset, "uixSvgIcon_mwrank_KSBacker");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SVGAsset, "uixSvgIcon_mwrank_Commander");
-    //    for (int index = 0; index < 5; ++index)
-    //      loadRequest.AddBlindLoadRequest(BattleTechResourceType.SVGAsset, string.Format("{0}{1}{2}", (object)"uixSvgIcon_mwrank_", (object)"Rank", (object)(index + 1)));
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SVGAsset, "uixSvgIcon_generic_MechPart");
-    //    foreach (VersionManifestEntry versionManifestEntry in simgame.DataManager.ResourceLocator.AllEntriesOfResourceFromAddendum(BattleTechResourceType.Texture2D, simgame.DataManager.ResourceLocator.GetAddendumByName(Traverse.Create(simgame).Field<string>("CONVERSATION_TEXTURE_ADDENDUM").Value)))
-    //      loadRequest.AddBlindLoadRequest(BattleTechResourceType.Texture2D, versionManifestEntry.Id);
-    //    foreach (VersionManifestEntry versionManifestEntry in simgame.DataManager.ResourceLocator.AllEntriesOfResourceFromAddendum(BattleTechResourceType.Sprite, simgame.DataManager.ResourceLocator.GetAddendumByName(Traverse.Create(simgame).Field<string>("PLAYER_CREST_ADDENDUM").Value)))
-    //      loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, versionManifestEntry.Id);
-    //    simgame.Player1sMercUnitHeraldryDef = simgame.Constants.Player1sMercUnitHeraldryDef;
-    //    //MethodInfo m_RequestResources = simgame.Player1sMercUnitHeraldryDef.GetType().GetMethod("RequestResources");
-    //    Traverse.Create(simgame.Player1sMercUnitHeraldryDef).Method("RequestResources", new Type[] { typeof(DataManager), typeof(Action) }, new object[] { simgame.DataManager, null }).GetValue();
-    //    //__instance.Player1sMercUnitHeraldryDef.RequestResources(__instance.DataManager);
-    //    foreach (SimGameState.SimGameCharacterType gameCharacterType in Enum.GetValues(typeof(SimGameState.SimGameCharacterType))) {
-    //      if (gameCharacterType != SimGameState.SimGameCharacterType.UNSET) {
-    //        string str = "TooltipSimGameCharacter" + gameCharacterType.ToString();
-    //        if (simgame.DataManager.ResourceLocator.EntryByID(str, BattleTechResourceType.BackgroundDef) != null)
-    //          loadRequest.AddBlindLoadRequest(BattleTechResourceType.BaseDescriptionDef, str);
-    //      }
-    //    }
-    //    loadRequest.AddAllOfTypeBlindLoadRequestPrewarm(BattleTechResourceType.ItemCollectionDef, new bool?(true));
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SimpleText, "careerModeAllLightChassis");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SimpleText, "careerModeAllMediumChassis");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SimpleText, "careerModeAllHeavyChassis");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.SimpleText, "careerModeAllAssaultChassis");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, "uixTxrSpot_flashpointExample");
-    //    loadRequest.AddBlindLoadRequest(BattleTechResourceType.Sprite, "uixTxrSpot_StarmapV2-Example");
-    //  } catch (Exception e) {
-    //    Log.M?.TWL(0, e.ToString(), true);
-    //  }
-    //  Log.M?.TWL(0, "FastDataLoadHelper.Final:" + loadRequest.GetRequestCount());
-    //  loadRequest.ProcessRequests();
-    //}
     public static Queue<PilotableActorDef> validateUnitsDefs = new Queue<PilotableActorDef>();
     public static void ValidateMechDefWork() {
       do {
@@ -2097,10 +2195,10 @@ namespace CustomPrewarm {
         }
       }
       foreach (MechDef def in toDeleteMech) {
-        Traverse.Create(simgame.DataManager).Field<DictionaryStore<MechDef>>("mechDefs").Value.Remove(def.Description.Id);
+        simgame.DataManager.mechDefs.Remove(def.Description.Id);
       }
       foreach (VehicleDef def in toDeleteVehicle) {
-        Traverse.Create(simgame.DataManager).Field<DictionaryStore<VehicleDef>>("vehicleDefs").Value.Remove(def.Description.Id);
+        simgame.DataManager.vehicleDefs.Remove(def.Description.Id);
       }
       Log.M?.TWL(0, "FastDataLoadHelper.CheckUnitsChassis end", true);
       return result;

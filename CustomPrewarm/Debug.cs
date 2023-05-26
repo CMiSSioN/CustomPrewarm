@@ -14,11 +14,9 @@ using UnityEngine;
 namespace CustomPrewarm {
   [HarmonyPatch(typeof(SimGameContext), "Rehydrate")]
   public static class SimGameContext_Rehydrate {
-    private static bool callOriginal = false;
-    public static bool Prefix(SimGameContext __instance, SimGameState simState,SimGameSave simGameSave, SerializableReferenceContainer references) {
-      if (callOriginal) { return true; }
-      callOriginal = true;
+    public static void Prefix(ref bool __runOriginal, SimGameContext __instance, SimGameState simState, SimGameSave simGameSave, SerializableReferenceContainer references) {
       try {
+        if (!__runOriginal) { return; }
         Log.M?.TWL(0, "SimGameContext.Rehydrate");
         Log.M?.WL(1, "singleObjectReferences");
         foreach (var singleRefs in simGameSave.GlobalReferences.singleObjectReferences) {
@@ -32,26 +30,18 @@ namespace CustomPrewarm {
         }
       } catch (Exception e) {
         Log.M_Err?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
       }
-      callOriginal = false;
-      return false;
+      __runOriginal = false;
     }
   }
   [HarmonyPatch(typeof(MetadataDatabase), "WriteInMemoryDBToDisk")]
   public static class MetadataDatabase_WriteInMemoryDBToDisk {
-    private static bool callOriginal = false;
-    public static bool Prefix(MetadataDatabase __instance, string filePath) {
-      if (callOriginal) { return true; }
-      callOriginal = true;
-      try {
-        Log.M?.TWL(0, "MetadataDatabase.WriteInMemoryDBToDisk "+filePath);
-        Log.M?.WL(1,Environment.StackTrace,true);
-        __instance.WriteInMemoryDBToDisk(filePath);
-      } catch (Exception e) {
-        Log.M_Err?.TWL(0, e.ToString(), true);
+    public static void Finalizer(MetadataDatabase __instance, string filePath, Exception __exception) {
+      if (__exception != null) {
+        Log.M_Err?.TWL(0, __exception.ToString(), true);
+        MetadataDatabase.log.LogException(__exception);
       }
-      callOriginal = false;
-      return false;
     }
   }
   //[HarmonyPatch(typeof(SimGameState), "GenerateSimGameUID")]
@@ -105,6 +95,7 @@ namespace CustomPrewarm {
           __instance.activeRoutine = (Coroutine)null;
         } catch (Exception e) {
           Log.M?.TWL(0, e.ToString(), true);
+          UIManager.logger.LogException(e);
         }
       }
     }
@@ -114,6 +105,7 @@ namespace CustomPrewarm {
         __instance.activeRoutine = __instance.StartCoroutine(__instance.InitializeUXRoutineLoc());
       } catch (Exception e) {
         Log.M_Err?.TWL(0, e.ToString(), true);
+        UIManager.logger.LogException(e);
       }
       return false;
     }
@@ -141,6 +133,7 @@ namespace CustomPrewarm {
         __instance.roomActive = false;
       } catch (Exception e) {
         Log.M_Err?.TWL(0, e.ToString(), true);
+        UIManager.logger.LogException(e);
       }
       return false;
     }
@@ -158,10 +151,12 @@ namespace CustomPrewarm {
             gameContext.SetObject(setTagEnum, (object)mechDef);
           }catch(Exception e) {
             Log.M?.WL(2,e.Message);
+            SimGameState.logger.LogException(e);
           }
         }
       } catch (Exception e) {
         Log.M_Err?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
       }
       return false;
     }
@@ -179,10 +174,12 @@ namespace CustomPrewarm {
             gameContext.SetObject(setTagEnum, (object)pilot);
           } catch (Exception e) {
             Log.M?.WL(2, e.Message);
+            SimGameState.logger.LogException(e);
           }
         }
       } catch (Exception e) {
         Log.M_Err?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
       }
       return false;
     }
@@ -201,10 +198,12 @@ namespace CustomPrewarm {
             gameContext.SetObject(setTagEnum, (object)starSystem);
           } catch (Exception e) {
             Log.M?.WL(2, e.Message);
+            SimGameState.logger.LogException(e);
           }
         }
       } catch (Exception e) {
         Log.M_Err?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
       }
       return false;
     }
@@ -227,10 +226,12 @@ namespace CustomPrewarm {
             }
           }catch(Exception e) {
             Log.M?.WL(2, e.Message);
+            SimGameState.logger.LogException(e);
           }
         }
       } catch (Exception e) {
         Log.M_Err?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
       }
       return false;
     }
@@ -251,10 +252,12 @@ namespace CustomPrewarm {
               gameContext.SetObject(setTagEnum, (object)flashpoint);
           }catch(Exception e) {
             Log.M?.WL(2, e.Message);
+            SimGameState.logger.LogException(e);
           }
         }
       } catch (Exception e) {
         Log.M_Err?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
       }
       return false;
     }
@@ -270,6 +273,7 @@ namespace CustomPrewarm {
         __instance.CreateSim(gameType, debug);
       } catch (Exception e) {
         Log.M_Err?.TWL(0, e.ToString(), true);
+        SimGameState.logger.LogException(e);
       }
       callOriginal = false;
       return false;
@@ -294,17 +298,10 @@ namespace CustomPrewarm {
   [HarmonyPatch(typeof(MainMenu), "EnableCareerLoadIfCareerSaves")]
   public static class MainMenu_EnableCareerLoadIfCareerSaves {
     private static bool callOriginal = false;
-    public static bool Prefix(MainMenu __instance, MessageCenterMessage message) {
-      if (callOriginal) { return true; }
-      callOriginal = true;
-      try {
-      Log.M?.TWL(0, "MainMenu.EnableCareerLoadIfCareerSaves", true);
-        __instance.EnableCareerLoadIfCareerSaves(message);
-      } catch (Exception e) {
-      Log.M_Err?.TWL(0, e.ToString(), true);
+    public static void Finalizer(MainMenu __instance, MessageCenterMessage message, Exception __exception) {
+      if(__exception != null) {
+        UIManager.logger.LogException(__exception);
       }
-      callOriginal = false;
-      return false;
     }
   }
 

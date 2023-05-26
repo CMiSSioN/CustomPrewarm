@@ -324,6 +324,21 @@ namespace CustomPrewarm{
     [CustomSettings.LocalSettingValuesNames(Strings.Culture.CULTURE_RU_RU, "Да", "Нет")]
     public bool UseFastPreloading { get; set; } = false;
     public bool UseHashedPreloading { get; set; } = false;
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_EN_US, "Validate assetbundles")]
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_RU_RU, "Валидировать ассетбандлы")]
+    [CustomSettings.IsLocalSetting()]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_EN_US, "If enabled at main menu after cache loading/building it will load all assetbundles")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_EN_US, "and check if they are really contains prefabs data manager manifest refers too")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_EN_US, "as result it will create assetbundlesdump.json")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_EN_US, "If you do not know why this option needed - keep it off")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "Если включено, после работы с кэшем CustomPrewarm загрузит все ассетбандлы")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "и проверит - действительно ли они содержат те префабы, что указаны в манифесте")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "в результате будет сгенерирован файл assetbundlesdump.json")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "Если вы не знаете зачем эта опция, включать ее не надо")]
+    [CustomSettings.LocalSettingValues(true, false)]
+    [CustomSettings.LocalSettingValuesNames(Strings.Culture.CULTURE_EN_US, "Yes", "No")]
+    [CustomSettings.LocalSettingValuesNames(Strings.Culture.CULTURE_RU_RU, "Да", "Нет")]
+    public bool AssetBundlesValidate { get; set; } = false;
     public int ModTekIndexingDelay { get; set; } = 1000;
     [JsonIgnore]
     public string savesdirectory { get; set; } = string.Empty;
@@ -334,6 +349,7 @@ namespace CustomPrewarm{
       this.debugLog = local.debugLog;
       this.UseFastPreloading = local.UseFastPreloading;
       this.UseHashedPreloading = local.UseHashedPreloading;
+      this.AssetBundlesValidate = local.AssetBundlesValidate;
     }
   }
   public class SerializeRegistred {
