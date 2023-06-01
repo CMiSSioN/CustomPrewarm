@@ -11,6 +11,20 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+
+namespace CustomPrewarm {
+  public class ItemsCountSanitizeBlackListDef {
+    public static HashSet<string> noSanitizeIds = new HashSet<string>();
+    public static HashSet<string> noSanitizeTypes = new HashSet<string>();
+    public List<string> blacklistedIds { get; set; } = new List<string>();
+    public List<string> blacklistedTypes { get; set; } = new List<string>();
+    public void Register() {
+      foreach (var item in blacklistedIds) { noSanitizeIds.Add(item); }
+      foreach (var item in blacklistedTypes) { noSanitizeTypes.Add(item); }
+    }
+  }
+}
+
 namespace CustomPrewarm.Serialize {
   //[HarmonyPatch(typeof(BattleTech.MechValidationRules), "ValidateMechDef")]
   //public static class MechValidationRulesValidate_ValidateMech_Patch {
@@ -420,7 +434,7 @@ namespace CustomPrewarm{
       }
       return res;
     }
-    public static void FinishedLoading(List<string> loadOrder) {
+    public static void FinishedLoading(List<string> loadOrder, Dictionary<string, Dictionary<string, BattleTech.VersionManifestEntry>> customResources) {
       Log.M_Err?.TWL(0, "FinishedLoading", true);
       try {
         var harmony = new Harmony("io.kmission.fastload");
@@ -433,6 +447,25 @@ namespace CustomPrewarm{
           , Serialize.LocalSettingsHelper.CurrentSettings
           , Serialize.LocalSettingsHelper.SaveSettings
           );
+        foreach (var customResource in customResources) {
+          Log.M?.TWL(0, $"customResource:{customResource.Key}");
+          if (customResource.Key == nameof(ItemsCountSanitizeBlackListDef)) {
+            foreach (var res in customResource.Value) {
+              try {
+                Log.M?.WL(1, $"Path:{res.Value.FilePath}", true);
+                ItemsCountSanitizeBlackListDef def = JsonConvert.DeserializeObject<ItemsCountSanitizeBlackListDef>(File.ReadAllText(res.Value.FilePath));
+                def.Register();
+              } catch (Exception e) {
+                Log.M_Err?.TWL(0, res.Key, true);
+                Log.M_Err?.WL(0, e.ToString(), true);
+              }
+            }
+          }
+        }
+        Log.M?.TWL(0, $"Sanitize blacklist:{ItemsCountSanitizeBlackListDef.noSanitizeIds.Count}");
+        foreach(var bl in ItemsCountSanitizeBlackListDef.noSanitizeIds) {
+          Log.M?.WL(1, $"{bl}");
+        }
       } catch (Exception e) {
         Log.M.TWL(0, e.ToString(), true);
       }

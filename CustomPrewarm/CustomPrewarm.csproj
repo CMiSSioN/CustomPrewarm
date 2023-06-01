@@ -119,19 +119,25 @@
   <ItemGroup>
     <None Include="mod.json" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Readme.txt" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>if exist "$(BattleTechGameDir)\Mods_CBDE\Core\CustomPrewarm" (
   echo %25BattleTechGameDir%25
   copy /Y "$(TargetPath)" "$(BattleTechGameDir)\Mods_CBDE\Core\CustomPrewarm"
+  copy /Y "$(ProjectDir)\Readme.txt" "$(BattleTechGameDir)\Mods_CBDE\Core\CustomPrewarm"
 )
 if exist "$(BattleTechGameDir)\Mods\Core\CustomPrewarm" (
   echo %25BattleTechGameDir%25
   copy /Y "$(TargetPath)" "$(BattleTechGameDir)\Mods\Core\CustomPrewarm"
+  copy /Y "$(ProjectDir)\Readme.txt" "$(BattleTechGameDir)\Mods\Core\CustomPrewarm"
 )
 if exist "$(RogueTechRepo)\Core\CustomPrewarm" (
   echo %25BattleTechGameDir%25
   copy /Y "$(TargetPath)" "$(RogueTechRepo)\Core\CustomPrewarm"
+  copy /Y "$(ProjectDir)\Readme.txt" "$(RogueTechRepo)\Core\CustomPrewarm"
 )
 		</PostBuildEvent>
   </PropertyGroup>

@@ -1462,9 +1462,13 @@ namespace CustomPrewarm {
         var stat = __instance.companyStats.GetStatistic(id);
         if (stat == null) { return; }
         if (stat.Value<int>() <= 0) {
-          SimGameState.logger.LogDebug($"{id} have value {stat.Value<int>()} removing");
-          Log.M?.TWL(0, $"{id} have value {stat.Value<int>()} removing");
-          __instance.companyStats.RemoveStatistic(id);
+          if (CustomPrewarm.ItemsCountSanitizeBlackListDef.noSanitizeIds.Contains(id)) {
+            SimGameState.logger.LogDebug($"{id} have value {stat.Value<int>()} keep cause in blacklist");
+          } else {
+            SimGameState.logger.LogDebug($"{id} have value {stat.Value<int>()} removing");
+            Log.M?.TWL(0, $"{id} have value {stat.Value<int>()} removing");
+            __instance.companyStats.RemoveStatistic(id);
+          }
         }
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
@@ -1484,7 +1488,14 @@ namespace CustomPrewarm {
         if (stat.Key.StartsWith("Item.") == false) { continue; }
         if (stat.Value.CheckType(typeof(int)) == false) { continue; }
         if (stat.Value.Value<int>() > 0) { continue; }
-        Log.M?.WL(1, $"{stat.Key}:{stat.Value.value} - deleting");
+        var name = stat.Key.Split('.');
+        if (name.Length < 3) { continue; }
+        if ((ItemsCountSanitizeBlackListDef.noSanitizeIds.Contains(name[2]) == false) && (ItemsCountSanitizeBlackListDef.noSanitizeTypes.Contains(name[1]) == false)) {
+          Log.M?.WL(1, $"{stat.Key}:{stat.Value.value} - deleting");
+          to_delete.Add(stat.Key);
+        } else {
+          Log.M?.WL(1, $"{stat.Key}:{stat.Value.value} - keep cause in blacklist");
+        }
       }
       foreach (var name in to_delete) { sim.CompanyStats.RemoveStatistic(name); }
     }
